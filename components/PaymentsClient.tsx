@@ -2,7 +2,17 @@
 
 import { useState } from "react";
 
-export default function PaymentsClient({ payments }: { payments: any[] }) {
+interface PaymentData {
+  _id: string;
+  month: string;
+  totalLiters: number;
+  milkAmount: number;
+  advancesDeducted: number;
+  finalAmount: number;
+  paid: boolean;
+}
+
+export default function PaymentsClient({ payments }: { payments: PaymentData[] }) {
   const [data, setData] = useState(payments);
 
   const handleMarkPaid = async (id: string) => {

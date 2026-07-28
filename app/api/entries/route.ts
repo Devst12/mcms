@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const milkType = searchParams.get("milkType") || undefined;
     const entries = await getEntries(dateFrom, dateTo, farmerId, milkType);
     return NextResponse.json(entries);
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: "Failed to fetch entries" }, { status: 500 });
   }
 }
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const entry = await createEntry(body);
     return NextResponse.json(entry, { status: 201 });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: "Failed to create entry" }, { status: 500 });
   }
 }

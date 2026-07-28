@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { getFarmers, getEntries } from "@/lib/db";
 
 interface EntryData {
   _id: string;
@@ -16,21 +15,21 @@ interface EntryData {
   rateUsed: number;
 }
 
-export default function SlipClient({ initialFarmerId }: { initialFarmerId?: string }) {
+function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
   const searchParams = useSearchParams();
-  const farmerId = initialFarmerId || searchParams.get("farmerId") || "";
-  const [farmers, setFarmers] = useState<any[]>([]);
+  const farmerId = searchParams.get("farmerId") || initialFarmerId || "";
+  const [farmers, setFarmers] = useState<Array<{ _id: string; name: string; code: string }>>([]);
   const [selectedFarmer, setSelectedFarmer] = useState(farmerId);
   const [entries, setEntries] = useState<EntryData[]>([]);
   const [period, setPeriod] = useState("thisMonth");
 
-  useEffect(() => {
-    fetch("/api/farmers")
-      .then((r) => r.json())
-      .then(setFarmers);
+  const fetchFarmers = useCallback(async () => {
+    const res = await fetch("/api/farmers");
+    const json = await res.json();
+    setFarmers(json);
   }, []);
 
-  const loadEntries = async () => {
+  const loadEntries = useCallback(async () => {
     if (!selectedFarmer) return;
     const now = new Date();
     let from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
@@ -42,11 +41,21 @@ export default function SlipClient({ initialFarmerId }: { initialFarmerId?: stri
     const res = await fetch(`/api/entries?farmerId=${selectedFarmer}&dateFrom=${from}`);
     const data = await res.json();
     setEntries(data);
-  };
+  }, [selectedFarmer, period]);
 
   useEffect(() => {
-    loadEntries();
-  }, [selectedFarmer, period]);
+    const timer = setTimeout(() => {
+      fetchFarmers();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchFarmers]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadEntries();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [loadEntries]);
 
   const print = () => {
     window.print();
@@ -112,5 +121,13 @@ export default function SlipClient({ initialFarmerId }: { initialFarmerId?: stri
         </div>
       )}
     </div>
+  );
+}
+
+export default function SlipClient({ initialFarmerId }: { initialFarmerId?: string }) {
+  return (
+    <Suspense fallback={<div className="p-4">Loading...</div>}>
+      <SlipInner initialFarmerId={initialFarmerId} />
+    </Suspense>
   );
 }

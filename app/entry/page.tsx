@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import MilkTypeToggle from "@/components/MilkTypeToggle";
 import { getTodayBs } from "@/lib/nepali-dates";
 import { saveEntryLocal, queueForSync } from "@/lib/indexed-db";
+
+export const dynamic = 'force-dynamic';
 
 interface Farmer {
   _id: string;
@@ -12,7 +14,7 @@ interface Farmer {
   code: string;
 }
 
-export default function DailyEntry() {
+function DailyEntryInner() {
   const searchParams = useSearchParams();
   const preselectedFarmer = searchParams.get("farmerId") || "";
   const [farmers, setFarmers] = useState<Farmer[]>([]);
@@ -131,5 +133,13 @@ export default function DailyEntry() {
         })}
       </div>
     </div>
+  );
+}
+
+export default function DailyEntry() {
+  return (
+    <Suspense fallback={<div className="p-4">Loading...</div>}>
+      <DailyEntryInner />
+    </Suspense>
   );
 }

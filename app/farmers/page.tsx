@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Farmer from "@/components/Farmer";
 import Link from "next/link";
 
 interface FarmerData {

@@ -1,5 +1,7 @@
 import { getRateSlabs } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 export default async function RatesPage() {
   const slabs = await getRateSlabs();
   const cowSlabs = slabs.filter((s) => s.milkType === "cow").sort((a, b) => b.effectiveFromAD.localeCompare(a.effectiveFromAD));

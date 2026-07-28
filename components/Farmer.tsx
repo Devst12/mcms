@@ -1,5 +1,3 @@
-import { getFarmerById } from "@/lib/db";
-
 interface FarmerCardProps {
   farmer: {
     _id: string;

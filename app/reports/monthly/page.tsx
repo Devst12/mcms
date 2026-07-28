@@ -1,5 +1,7 @@
 import { getEntries } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 export default async function MonthlyReports() {
   const allEntries = await getEntries("2000-01-01", "2099-12-31");
   const farmerMap = new Map();

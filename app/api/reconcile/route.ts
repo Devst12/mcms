@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const range = getPeriodDateRange(period);
     const results = await getReconciliation({ ...period, from: range.from, to: range.to });
     return NextResponse.json(results);
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: "Failed to calculate reconciliation" }, { status: 500 });
   }
 }

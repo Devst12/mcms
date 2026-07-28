@@ -1,6 +1,8 @@
 import { getFarmers, getAdvances } from "@/lib/db";
 import AdvanceForm from "@/components/AdvanceForm";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdvancesPage() {
   const [farmers, advances] = await Promise.all([
     getFarmers(),

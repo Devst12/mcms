@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 type PeriodType = "thisMonth" | "twoMonths" | "thisYear" | "allTime" | "custom";
 
 export interface Period {

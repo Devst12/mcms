@@ -1,5 +1,4 @@
 import { getEntries, getCompanyCollections, getFarmerById } from "./db";
-import { Entry, CompanyCollection, Farmer } from "./types";
 
 export type PeriodType = "thisMonth" | "twoMonths" | "thisYear" | "allTime" | "custom";
 
@@ -108,7 +107,7 @@ export async function getReconciliation(period: Period): Promise<
     const cowDiff = totals.cow - companyCow;
     const buffaloDiff = totals.buffalo - companyBuffalo;
     const totalDiff = cowDiff + buffaloDiff;
-    const status = totalDiff === 0 ? "match" : totalDiff < 0 ? "shortage" : "excess";
+    const status: "match" | "shortage" | "excess" = totalDiff === 0 ? "match" : totalDiff < 0 ? "shortage" : "excess";
     results.push({
       farmerId: fid,
       farmerName: farmer?.name || "Unknown",

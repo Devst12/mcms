@@ -6,7 +6,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { id } = await params;
     await markPaymentPaid(id);
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: "Failed to mark as paid" }, { status: 500 });
   }
 }

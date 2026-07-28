@@ -1,14 +1,25 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import PeriodPicker, { type Period } from "@/components/PeriodPicker";
 
 export default function ReconcilePage() {
   const [period, setPeriod] = useState<Period>({ type: "thisMonth" });
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<Array<{
+    farmerId: string;
+    farmerName: string;
+    farmerCow: number;
+    farmerBuffalo: number;
+    companyCow: number;
+    companyBuffalo: number;
+    cowDiff: number;
+    buffaloDiff: number;
+    totalDiff: number;
+    status: "match" | "shortage" | "excess";
+  }>>([]);
   const [loading, setLoading] = useState(false);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
     params.set("period", period.type);
@@ -18,11 +29,14 @@ export default function ReconcilePage() {
     const json = await res.json();
     setData(json);
     setLoading(false);
-  };
+  }, [period]);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    const timer = setTimeout(() => {
+      loadData();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [loadData]);
 
   return (
     <div className="p-4 space-y-4">

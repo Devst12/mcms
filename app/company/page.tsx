@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { getTodayBs } from "@/lib/nepali-dates";
 import { saveCompanyCollectionLocal, queueForSync } from "@/lib/indexed-db";
 

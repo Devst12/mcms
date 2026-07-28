@@ -2,6 +2,8 @@ import { getFarmers, getEntries, getCompanyCollections } from "@/lib/db";
 import { getTodayBs, getTodayAd } from "@/lib/nepali-dates";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 export default async function Dashboard() {
   const todayAd = getTodayAd();
   const todayBs = getTodayBs();
