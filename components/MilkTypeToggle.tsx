@@ -1,7 +1,5 @@
 "use client";
 
-import { Cow, MilkIcon as Buffalo } from "lucide-react";
-
 interface MilkTypeToggleProps {
   value: "cow" | "buffalo";
   onChange: (value: "cow" | "buffalo") => void;
@@ -18,8 +16,7 @@ export default function MilkTypeToggle({ value, onChange }: MilkTypeToggleProps)
             : "bg-gray-100 text-gray-500 border-2 border-transparent"
         }`}
       >
-        <Cow size={24} />
-        Cow 🐄
+        🐄 Cow
       </button>
       <button
         onClick={() => onChange("buffalo")}
@@ -29,8 +26,7 @@ export default function MilkTypeToggle({ value, onChange }: MilkTypeToggleProps)
             : "bg-gray-100 text-gray-500 border-2 border-transparent"
         }`}
       >
-        <Buffalo size={24} />
-        Buffalo 🐃
+        🐃 Buffalo
       </button>
     </div>
   );

@@ -1,65 +1,84 @@
-import Image from "next/image";
+import { getFarmers, getEntries, getCompanyCollections } from "@/lib/db";
+import { getTodayBs, getTodayAd } from "@/lib/nepali-dates";
+import Link from "next/link";
 
-export default function Home() {
+export default async function Dashboard() {
+  const todayAd = getTodayAd();
+  const todayBs = getTodayBs();
+  const [farmers, todayEntries, companyCollections] = await Promise.all([
+    getFarmers(),
+    getEntries(todayAd, todayAd),
+    getCompanyCollections(todayAd, todayAd),
+  ]);
+
+  const cowEntries = todayEntries.filter((e) => e.milkType === "cow");
+  const buffaloEntries = todayEntries.filter((e) => e.milkType === "buffalo");
+  const cowTotal = cowEntries.reduce((sum, e) => sum + e.morningQty + e.eveningQty, 0);
+  const buffaloTotal = buffaloEntries.reduce((sum, e) => sum + e.morningQty + e.eveningQty, 0);
+
+  const enteredFarmerIds = new Set(todayEntries.map((e) => e.farmerId));
+  const activeFarmers = farmers.filter((f) => f.active);
+  const notEntered = activeFarmers.filter((f) => !enteredFarmerIds.has(f._id));
+
+  const companyCow = companyCollections.filter((c) => c.milkType === "cow").reduce((sum, c) => sum + c.reportedQty, 0);
+  const companyBuffalo = companyCollections.filter((c) => c.milkType === "buffalo").reduce((sum, c) => sum + c.reportedQty, 0);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-gray-600">{todayBs} (BS) / {todayAd} (AD)</p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <Link href="/entry" className="px-4 py-3 min-h-touch bg-blue-600 text-white rounded-lg font-medium">
+          Quick Entry
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="p-4 bg-cow rounded-xl border-2 border-gray-300">
+          <p className="text-sm font-medium text-gray-700">Cow Total 🐄</p>
+          <p className="text-3xl-large font-bold">{cowTotal.toFixed(1)} L</p>
         </div>
-      </main>
+        <div className="p-4 bg-buffalo rounded-xl border-2 border-gray-600">
+          <p className="text-sm font-medium text-gray-700">Buffalo Total 🐃</p>
+          <p className="text-3xl-large font-bold">{buffaloTotal.toFixed(1)} L</p>
+        </div>
+      </div>
+
+      <div className="p-4 bg-white rounded-xl border">
+        <h2 className="text-lg font-semibold mb-2">This Month Variance</h2>
+        <div className="flex gap-4">
+          <div>
+            <p className="text-sm text-gray-600">Farmer Total</p>
+            <p className="text-xl-large font-bold">{(cowTotal + buffaloTotal).toFixed(1)} L</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-600">Company Reported</p>
+            <p className="text-xl-large font-bold">{(companyCow + companyBuffalo).toFixed(1)} L</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-600">Difference</p>
+            <p className="text-xl-large font-bold">{(cowTotal + buffaloTotal - companyCow - companyBuffalo).toFixed(1)} L</p>
+          </div>
+        </div>
+      </div>
+
+      {notEntered.length > 0 && (
+        <div className="p-4 bg-yellow-50 rounded-xl border border-yellow-200">
+          <h2 className="text-lg font-semibold mb-2">Not Entered Today</h2>
+          <div className="space-y-2">
+            {notEntered.map((f) => (
+              <div key={f._id} className="flex items-center justify-between">
+                <span>{f.name} ({f.code})</span>
+                <Link href={`/entry?farmerId=${f._id}`} className="text-blue-600 text-sm font-medium">
+                  Add Entry
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

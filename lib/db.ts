@@ -1,4 +1,5 @@
 import { getDb } from "./mongodb";
+import { ObjectId } from "mongodb";
 import { Farmer, RateSlab, Entry, CompanyCollection, Advance, Payment } from "./types";
 
 export async function getFarmers(): Promise<Farmer[]> {
@@ -8,7 +9,7 @@ export async function getFarmers(): Promise<Farmer[]> {
 
 export async function getFarmerById(id: string): Promise<Farmer | null> {
   const db = await getDb();
-  return db.collection<Farmer>("farmers").findOne({ _id: new (await import("mongodb")).ObjectId(id) });
+  return db.collection<Farmer>("farmers").findOne({ _id: new ObjectId(id) });
 }
 
 export async function getFarmerByCode(code: string): Promise<Farmer | null> {
@@ -18,7 +19,6 @@ export async function getFarmerByCode(code: string): Promise<Farmer | null> {
 
 export async function createFarmer(data: Omit<Farmer, "_id" | "code" | "createdAt"> & { code?: string }): Promise<Farmer> {
   const db = await getDb();
-  const ObjectId = (await import("mongodb")).ObjectId;
   const farmers = await db.collection<Farmer>("farmers").find({}).sort({ code: 1 }).toArray();
   const nextNum = farmers.length + 1;
   const code = data.code || `F${String(nextNum).padStart(3, "0")}`;
@@ -34,7 +34,6 @@ export async function createFarmer(data: Omit<Farmer, "_id" | "code" | "createdA
 
 export async function updateFarmer(id: string, data: Partial<Farmer>): Promise<Farmer | null> {
   const db = await getDb();
-  const ObjectId = (await import("mongodb")).ObjectId;
   const result = await db.collection<Farmer>("farmers").findOneAndUpdate(
     { _id: new ObjectId(id) },
     { $set: data },
@@ -45,7 +44,6 @@ export async function updateFarmer(id: string, data: Partial<Farmer>): Promise<F
 
 export async function deleteFarmer(id: string): Promise<boolean> {
   const db = await getDb();
-  const ObjectId = (await import("mongodb")).ObjectId;
   const result = await db.collection<Farmer>("farmers").deleteOne({ _id: new ObjectId(id) });
   return result.deletedCount > 0;
 }
@@ -65,7 +63,6 @@ export async function getEntries(dateFrom?: string, dateTo?: string, farmerId?: 
 
 export async function createEntry(data: Omit<Entry, "_id" | "createdAt">): Promise<Entry> {
   const db = await getDb();
-  const ObjectId = (await import("mongodb")).ObjectId;
   const entry: Entry = {
     ...data,
     _id: new ObjectId().toHexString(),
@@ -77,7 +74,6 @@ export async function createEntry(data: Omit<Entry, "_id" | "createdAt">): Promi
 
 export async function updateEntry(id: string, data: Partial<Entry>): Promise<Entry | null> {
   const db = await getDb();
-  const ObjectId = (await import("mongodb")).ObjectId;
   const result = await db.collection<Entry>("entries").findOneAndUpdate(
     { _id: new ObjectId(id) },
     { $set: data },
@@ -100,7 +96,6 @@ export async function getCompanyCollections(dateFrom?: string, dateTo?: string, 
 
 export async function upsertCompanyCollection(data: Omit<CompanyCollection, "_id" | "createdAt">): Promise<CompanyCollection> {
   const db = await getDb();
-  const ObjectId = (await import("mongodb")).ObjectId;
   const existing = await db.collection<CompanyCollection>("company_collections").findOne({
     dateAD: data.dateAD,
     milkType: data.milkType,
@@ -139,7 +134,6 @@ export async function getActiveRateSlab(milkType: string, dateAD: string): Promi
 
 export async function createRateSlab(data: Omit<RateSlab, "_id" | "createdAt">): Promise<RateSlab> {
   const db = await getDb();
-  const ObjectId = (await import("mongodb")).ObjectId;
   const slab: RateSlab = {
     ...data,
     _id: new ObjectId().toHexString(),
@@ -157,7 +151,6 @@ export async function getAdvances(farmerId?: string): Promise<Advance[]> {
 
 export async function createAdvance(data: Omit<Advance, "_id" | "createdAt">): Promise<Advance> {
   const db = await getDb();
-  const ObjectId = (await import("mongodb")).ObjectId;
   const advance: Advance = {
     ...data,
     _id: new ObjectId().toHexString(),
@@ -169,7 +162,6 @@ export async function createAdvance(data: Omit<Advance, "_id" | "createdAt">): P
 
 export async function settleAdvance(id: string, paymentId: string): Promise<boolean> {
   const db = await getDb();
-  const ObjectId = (await import("mongodb")).ObjectId;
   const result = await db.collection<Advance>("advances").updateOne(
     { _id: new ObjectId(id) },
     { $set: { settled: true, settledInPaymentId: paymentId } }
@@ -193,7 +185,7 @@ export async function calculatePayment(farmerId: string, month: string): Promise
   finalAmount: number;
 } | null> {
   const db = await getDb();
-  const [entries] = await Promise.all([
+  const [entries, advances] = await Promise.all([
     db.collection<Entry>("entries").find({ farmerId, dateAD: { $regex: `^${month}` } }).toArray(),
     db.collection<Advance>("advances").find({ farmerId, settled: false }).toArray(),
   ]);
@@ -210,7 +202,6 @@ export async function calculatePayment(farmerId: string, month: string): Promise
 
 export async function createPayment(data: Omit<Payment, "_id">): Promise<Payment> {
   const db = await getDb();
-  const ObjectId = (await import("mongodb")).ObjectId;
   const payment: Payment = {
     ...data,
     _id: new ObjectId().toHexString(),
@@ -221,7 +212,6 @@ export async function createPayment(data: Omit<Payment, "_id">): Promise<Payment
 
 export async function markPaymentPaid(id: string): Promise<boolean> {
   const db = await getDb();
-  const ObjectId = (await import("mongodb")).ObjectId;
   const result = await db.collection<Payment>("payments").updateOne(
     { _id: new ObjectId(id) },
     { $set: { paid: true, paidAt: new Date().toISOString() } }
