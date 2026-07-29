@@ -5,7 +5,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const { id } = await params;
     const db = await getDb();
-    const result = await db.collection("farmers").deleteOne({ _id: id });
+    const result = await db.collection("farmers").deleteOne({ _id: id } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
     if (result.deletedCount === 0) {
       return NextResponse.json({ error: "Farmer not found" }, { status: 404 });
     }

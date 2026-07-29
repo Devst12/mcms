@@ -1,5 +1,6 @@
 import { getFarmerById, getEntries, getAdvances } from "@/lib/db";
 import Link from "next/link";
+import DeleteFarmerButton from "@/components/DeleteFarmerButton";
 
 export const dynamic = "force-dynamic";
 
@@ -23,15 +24,7 @@ export default async function FarmerDetail({ params }: { params: Promise<{ id: s
           <Link href={`/slip/${id}`} className="px-4 py-3 min-h-touch bg-blue-600 text-white rounded-lg font-medium">
             View Slip
           </Link>
-          <form action={`/api/farmers/${id}/delete`} method="POST" onSubmit={(e) => {
-            if (!confirm(`Delete farmer ${farmer.name}? This cannot be undone.`)) {
-              e.preventDefault();
-            }
-          }}>
-            <button type="submit" className="px-4 py-3 min-h-touch bg-red-600 text-white rounded-lg font-medium">
-              Delete
-            </button>
-          </form>
+          <DeleteFarmerButton farmerId={id} farmerName={farmer.name} />
         </div>
       </div>
       <div className="p-4 bg-white rounded-xl border">

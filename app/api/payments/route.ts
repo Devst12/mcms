@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { calculatePayment, getAdvances, getEntries } from "@/lib/db";
+import { ObjectId } from "mongodb";
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
         finalAmount: result.finalAmount,
         paid: false,
       };
-      await db.collection("payments").insertOne(payment);
+      await db.collection("payments").insertOne(payment as any); // eslint-disable-line @typescript-eslint/no-explicit-any
       return NextResponse.json(payment, { status: 201 });
     }
 
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
           _id: new ObjectId().toHexString(),
           ...paymentData,
         };
-        await db.collection("payments").insertOne(payment);
+        await db.collection("payments").insertOne(payment as any); // eslint-disable-line @typescript-eslint/no-explicit-any
         results.push(payment);
       }
     }
