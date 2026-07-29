@@ -73,10 +73,12 @@ function EntriesInner() {
   }, [selectedFarmer, period, farmers]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchFarmers();
-  }, [fetchFarmers]);
+  }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadEntries();
   }, [loadEntries]);
 

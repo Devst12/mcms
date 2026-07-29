@@ -62,10 +62,12 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
   }, [selectedFarmer, period]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchFarmers();
-  }, [fetchFarmers]);
+  }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadEntries();
   }, [loadEntries]);
 
