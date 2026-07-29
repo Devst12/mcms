@@ -29,50 +29,64 @@ function EntriesInner() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ morning: "", evening: "", fat: "" });
 
+  const loadEntries = async () => {
+    setLoading(true);
+    const now = new Date();
+    let from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    let to = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-31`;
+
+    if (period.type === "twoMonths") {
+      const fromMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
+      const fromYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+      from = `${fromYear}-${String(fromMonth + 1).padStart(2, "0")}-01`;
+      to = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-31`;
+    } else if (period.type === "thisYear") {
+      from = `${now.getFullYear()}-01-01`;
+      to = `${now.getFullYear()}-12-31`;
+    } else if (period.type === "allTime") {
+      from = "2000-01-01";
+      to = "2099-12-31";
+    } else if (period.type === "custom" && period.from && period.to) {
+      from = period.from;
+      to = period.to;
+    }
+
+    const params = new URLSearchParams();
+    if (selectedFarmer) params.set("farmerId", selectedFarmer);
+    params.set("dateFrom", from);
+    params.set("dateTo", to);
+    const res = await fetch(`/api/entries?${params}`);
+    const data = await res.json() as EntryData[];
+
+    const farmerMap = new Map(farmers.map(f => [f._id, f.name]));
+    const enriched = data.map(e => ({
+      ...e,
+      farmerName: farmerMap.get(e.farmerId) || e.farmerId,
+    }));
+
+    setEntries(enriched);
+    setLoading(false);
+  };
+
   useEffect(() => {
     let cancelled = false;
-    const doLoad = async () => {
-      const now = new Date();
-      let from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-      let to = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-31`;
-
-      if (period.type === "twoMonths") {
-        const fromMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
-        const fromYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-        from = `${fromYear}-${String(fromMonth + 1).padStart(2, "0")}-01`;
-        to = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-31`;
-      } else if (period.type === "thisYear") {
-        from = `${now.getFullYear()}-01-01`;
-        to = `${now.getFullYear()}-12-31`;
-      } else if (period.type === "allTime") {
-        from = "2000-01-01";
-        to = "2099-12-31";
-      } else if (period.type === "custom" && period.from && period.to) {
-        from = period.from;
-        to = period.to;
-      }
-
-      const params = new URLSearchParams();
-      if (selectedFarmer) params.set("farmerId", selectedFarmer);
-      params.set("dateFrom", from);
-      params.set("dateTo", to);
-      const res = await fetch(`/api/entries?${params}`);
-      const data = await res.json() as EntryData[];
-
-      const farmerMap = new Map(farmers.map(f => [f._id, f.name]));
-      const enriched = data.map(e => ({
-        ...e,
-        farmerName: farmerMap.get(e.farmerId) || e.farmerId,
-      }));
-
-      if (!cancelled) {
-        setEntries(enriched);
-        setLoading(false);
-      }
-    };
-    doLoad();
+    fetch("/api/farmers")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) setFarmers(data);
+      });
     return () => { cancelled = true; };
-  }, [selectedFarmer, period, farmers]);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      await loadEntries();
+      if (cancelled) return;
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [selectedFarmer, period]);
 
   const startEdit = (entry: EntryData) => {
     setEditingId(entry._id);
