@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import PeriodPicker, { type Period } from "@/components/PeriodPicker";
 import PrintButton from "@/components/PrintButton";
+import Modal from "@/components/Modal";
 
 interface EntryData {
   _id: string;
@@ -28,8 +29,9 @@ function EntriesInner() {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ morning: "", evening: "", fat: "" });
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const loadEntries = async () => {
+  const loadEntries = useCallback(async () => {
     setLoading(true);
     const now = new Date();
     let from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
@@ -57,16 +59,9 @@ function EntriesInner() {
     params.set("dateTo", to);
     const res = await fetch(`/api/entries?${params}`);
     const data = await res.json() as EntryData[];
-
-    const farmerMap = new Map(farmers.map(f => [f._id, f.name]));
-    const enriched = data.map(e => ({
-      ...e,
-      farmerName: farmerMap.get(e.farmerId) || e.farmerId,
-    }));
-
-    setEntries(enriched);
+    setEntries(data);
     setLoading(false);
-  };
+  }, [selectedFarmer, period]);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,14 +74,18 @@ function EntriesInner() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      await loadEntries();
-      if (cancelled) return;
-    };
-    run();
-    return () => { cancelled = true; };
-  }, [selectedFarmer, period]);
+    loadEntries();
+  }, [loadEntries]);
+
+  useEffect(() => {
+    if (farmers.length === 0) return;
+    setEntries((prev) =>
+      prev.map((e) => ({
+        ...e,
+        farmerName: farmers.find((f) => f._id === e.farmerId)?.name || e.farmerId,
+      }))
+    );
+  }, [farmers]);
 
   const startEdit = (entry: EntryData) => {
     setEditingId(entry._id);
@@ -102,18 +101,21 @@ function EntriesInner() {
     const morningQty = parseFloat(editForm.morning) || 0;
     const eveningQty = parseFloat(editForm.evening) || 0;
     const fatPercent = parseFloat(editForm.fat) || 0;
-    await fetch(`/api/entries/${entry._id}`, {
+    const res = await fetch(`/api/entries/${entry._id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ morningQty, eveningQty, fatPercent, reason: "manual correction" }),
+      body: JSON.stringify({ morningQty, eveningQty, fatPercent }),
     });
-    cancelEdit();
-    loadEntries();
+    if (res.ok) {
+      cancelEdit();
+      loadEntries();
+    }
   };
 
-  const deleteEntry = async (id: string) => {
-    if (!confirm("Delete this entry? This cannot be undone.")) return;
-    await fetch(`/api/entries/${id}`, { method: "DELETE" });
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+    await fetch(`/api/entries/${deleteId}`, { method: "DELETE" });
+    setDeleteId(null);
     loadEntries();
   };
 
@@ -182,7 +184,7 @@ function EntriesInner() {
                   Cow: {dayCowTotal.toFixed(1)}L | Buffalo: {dayBuffaloTotal.toFixed(1)}L
                 </span>
               </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto -mx-4 px-4">
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="border-b">
@@ -194,7 +196,7 @@ function EntriesInner() {
                       <th className="py-1 px-2 text-right">Fat %</th>
                       <th className="py-1 px-2 text-right">Rate</th>
                       <th className="py-1 px-2 text-right">Amount</th>
-                      <th className="py-1 px-2">Actions</th>
+                      <th className="py-1 px-2 sticky right-0 bg-white z-10 shadow-[inset_8px_0_8px_-8px_rgba(0,0,0,0.1)]">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -218,7 +220,7 @@ function EntriesInner() {
                             <td className="py-1 px-2 text-right font-medium">
                               Rs. {((parseFloat(editForm.morning) || 0 + parseFloat(editForm.evening) || 0) * e.rateUsed).toFixed(2)}
                             </td>
-                            <td className="py-1 px-2">
+                            <td className="py-1 px-2 sticky right-0 bg-white z-10 shadow-[inset_8px_0_8px_-8px_rgba(0,0,0,0.1)]">
                               <div className="flex gap-1">
                                 <button onClick={() => saveEdit(e)} className="px-2 py-1 bg-green-600 text-white rounded text-xs">Save</button>
                                 <button onClick={cancelEdit} className="px-2 py-1 bg-gray-600 text-white rounded text-xs">Cancel</button>
@@ -237,10 +239,10 @@ function EntriesInner() {
                             <td className="py-1 px-2 text-right font-medium">
                               Rs. {((e.morningQty + e.eveningQty) * e.rateUsed).toFixed(2)}
                             </td>
-                            <td className="py-1 px-2">
+                            <td className="py-1 px-2 sticky right-0 bg-white z-10 shadow-[inset_8px_0_8px_-8px_rgba(0,0,0,0.1)]">
                               <div className="flex gap-1">
                                 <button onClick={() => startEdit(e)} className="px-2 py-1 bg-blue-600 text-white rounded text-xs">Edit</button>
-                                <button onClick={() => deleteEntry(e._id)} className="px-2 py-1 bg-red-600 text-white rounded text-xs">Del</button>
+                                <button onClick={() => setDeleteId(e._id)} className="px-2 py-1 bg-red-600 text-white rounded text-xs">Del</button>
                               </div>
                             </td>
                           </>
@@ -258,6 +260,18 @@ function EntriesInner() {
       {!loading && entries.length === 0 && (
         <p className="text-gray-500 text-center py-8">No entries found for the selected period.</p>
       )}
+
+      <Modal
+        open={!!deleteId}
+        title="Delete Entry"
+        onClose={() => setDeleteId(null)}
+        onConfirm={confirmDelete}
+        confirmText="Delete"
+        cancelText="Cancel"
+        danger
+      >
+        <p className="text-sm text-gray-600">Are you sure you want to delete this entry? This action cannot be undone.</p>
+      </Modal>
     </div>
   );
 }
