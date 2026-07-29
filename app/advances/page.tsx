@@ -16,22 +16,27 @@ export default function AdvancesPage() {
     createdAt: string;
   }>>([]);
 
-  useEffect(() => {
+  const loadFarmers = () => {
     fetch("/api/farmers")
       .then((r) => r.json())
       .then(setFarmers);
-  }, []);
+  };
 
-  useEffect(() => {
+  const loadAdvances = () => {
     fetch("/api/advances")
       .then((r) => r.json())
       .then(setAdvances);
+  };
+
+  useEffect(() => {
+    loadFarmers();
+    loadAdvances();
   }, []);
 
   return (
     <div className="p-4 space-y-4">
       <h1 className="text-2xl font-bold">Advances 💰</h1>
-      <AdvanceForm farmers={farmers} />
+      <AdvanceForm farmers={farmers} onAdvanceAdded={loadAdvances} />
       <div className="p-4 bg-white rounded-xl border">
         <h2 className="font-semibold mb-2">Recent Advances</h2>
         <div className="space-y-2">

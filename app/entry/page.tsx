@@ -56,8 +56,20 @@ function DailyEntryInner() {
       editHistory: [],
       createdAt: new Date().toISOString(),
     };
-    await saveEntryLocal(entry);
-    await queueForSync({ id: entry.id, collection: "entries", data: entry, timestamp: Date.now() });
+    try {
+      await saveEntryLocal(entry);
+      await queueForSync({ id: entry.id, collection: "entries", data: entry, timestamp: Date.now() });
+      const res = await fetch("/api/entries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(entry),
+      });
+      if (!res.ok) throw new Error("Failed to sync entry");
+    } catch (err) {
+      console.error("Save entry failed", err);
+      alert("Failed to save entry. Please try again.");
+      return;
+    }
     setEntries((prev) => {
       const next = { ...prev };
       delete next[farmerId];

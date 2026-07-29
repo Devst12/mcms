@@ -1,4 +1,5 @@
 import { getEntries } from "@/lib/db";
+import PrintButton from "@/components/PrintButton";
 
 export const dynamic = "force-dynamic";
 
@@ -40,9 +41,7 @@ export default async function MonthlyReports() {
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Monthly Reports 📊</h1>
-        <button onClick={() => window.print()} className="px-4 py-3 min-h-touch bg-gray-600 text-white rounded-lg font-medium">
-          Print
-        </button>
+        <PrintButton />
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">

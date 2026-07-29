@@ -9,7 +9,7 @@ export async function getFarmers(): Promise<Farmer[]> {
 
 export async function getFarmerById(id: string): Promise<Farmer | null> {
   const db = await getDb();
-  return db.collection<Farmer>("farmers").findOne({ _id: new ObjectId(id) } as any);
+  return db.collection<Farmer>("farmers").findOne({ _id: id });
 }
 
 export async function getFarmerByCode(code: string): Promise<Farmer | null> {
@@ -35,7 +35,7 @@ export async function createFarmer(data: Omit<Farmer, "_id" | "code" | "createdA
 export async function updateFarmer(id: string, data: Partial<Farmer>): Promise<Farmer | null> {
   const db = await getDb();
   const result = await db.collection<Farmer>("farmers").findOneAndUpdate(
-    { _id: new ObjectId(id) } as any,
+    { _id: id },
     { $set: data },
     { returnDocument: "after" }
   );
@@ -44,7 +44,7 @@ export async function updateFarmer(id: string, data: Partial<Farmer>): Promise<F
 
 export async function deleteFarmer(id: string): Promise<boolean> {
   const db = await getDb();
-  const result = await db.collection<Farmer>("farmers").deleteOne({ _id: new ObjectId(id) } as any);
+  const result = await db.collection<Farmer>("farmers").deleteOne({ _id: id });
   return result.deletedCount > 0;
 }
 
@@ -75,7 +75,7 @@ export async function createEntry(data: Omit<Entry, "_id" | "createdAt">): Promi
 export async function updateEntry(id: string, data: Partial<Entry>): Promise<Entry | null> {
   const db = await getDb();
   const result = await db.collection<Entry>("entries").findOneAndUpdate(
-    { _id: new ObjectId(id) } as any,
+    { _id: id },
     { $set: data },
     { returnDocument: "after" }
   );
@@ -163,7 +163,7 @@ export async function createAdvance(data: Omit<Advance, "_id" | "createdAt">): P
 export async function settleAdvance(id: string, paymentId: string): Promise<boolean> {
   const db = await getDb();
   const result = await db.collection<Advance>("advances").updateOne(
-    { _id: new ObjectId(id) } as any,
+    { _id: id },
     { $set: { settled: true, settledInPaymentId: paymentId } }
   );
   return result.modifiedCount > 0;
@@ -213,7 +213,7 @@ export async function createPayment(data: Omit<Payment, "_id">): Promise<Payment
 export async function markPaymentPaid(id: string): Promise<boolean> {
   const db = await getDb();
   const result = await db.collection<Payment>("payments").updateOne(
-    { _id: new ObjectId(id) } as any,
+    { _id: id },
     { $set: { paid: true, paidAt: new Date().toISOString() } }
   );
   return result.modifiedCount > 0;

@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Users, FileText, Building2, BarChart3, Scale, Wallet, Receipt, Settings, RefreshCw } from "lucide-react";
+import { Home, Users, FileText, Building2, BarChart3, Scale, Wallet, Receipt, Settings, RefreshCw, ClipboardList } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
   { href: "/", label: "Home", icon: Home },
   { href: "/farmers", label: "किसान", icon: Users },
   { href: "/entry", label: "Entry", icon: FileText },
+  { href: "/entries", label: "All Entries", icon: ClipboardList },
   { href: "/company", label: "Company", icon: Building2 },
   { href: "/reports/monthly", label: "Reports", icon: BarChart3 },
   { href: "/reconcile", label: "Reconcile", icon: Scale },
