@@ -31,7 +31,7 @@ export function getPeriodDateRange(period: Period): { from: string; to: string }
     case "allTime":
       return { from: "2000-01-01", to: "2099-12-31" };
     case "custom":
-      return { from: period.from || `${year}-01-01`, to: period.to || `${year}-12-31"` };
+      return { from: period.from || `${year}-01-01`, to: period.to || `${year}-12-31` };
     default:
       return { from: `${year}-01-01`, to: `${year}-12-31` };
   }

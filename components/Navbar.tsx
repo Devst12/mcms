@@ -23,21 +23,21 @@ export default function Navbar() {
   const pathname = usePathname();
   const [pendingSync, setPendingSync] = useState(0);
 
-  const updatePendingCount = async () => {
-    try {
-      const entries = await getUnsyncedItems("entries");
-      const companies = await getUnsyncedItems("company_collections");
-      const advances = await getUnsyncedItems("advances");
-      setPendingSync(entries.length + companies.length + advances.length);
-    } catch {
-      // ignore
-    }
-  };
-
   useEffect(() => {
+    let cancelled = false;
+    const updatePendingCount = async () => {
+      try {
+        const entries = await getUnsyncedItems("entries");
+        const companies = await getUnsyncedItems("company_collections");
+        const advances = await getUnsyncedItems("advances");
+        if (!cancelled) setPendingSync(entries.length + companies.length + advances.length);
+      } catch {
+        // ignore
+      }
+    };
     updatePendingCount();
     const interval = setInterval(updatePendingCount, 30000);
-    return () => clearInterval(interval);
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
   const handleSync = async () => {

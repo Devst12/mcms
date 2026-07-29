@@ -33,7 +33,6 @@ function DailyEntryInner() {
   const [dateBS, setDateBS] = useState(getTodayBs());
   const [entries, setEntries] = useState<Record<string, { morning: string; evening: string; fat: string }>>({});
   const [slabs, setSlabs] = useState<{ minFat: number; maxFat: number; rate: number }[]>([]);
-  const [ratesLoaded, setRatesLoaded] = useState(false);
 
   useEffect(() => {
     fetch("/api/farmers")
@@ -42,16 +41,17 @@ function DailyEntryInner() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     const loadSlabs = async () => {
       const dateAd = await (await import("@/lib/nepali-dates")).bsToAd(dateBS);
       const res = await fetch(`/api/rates?milkType=${milkType}&dateAD=${dateAd}`);
-      if (res.ok) {
+      if (res.ok && !cancelled) {
         const data = await res.json();
         setSlabs(data?.slabs || []);
       }
-      setRatesLoaded(true);
     };
     loadSlabs();
+    return () => { cancelled = true; };
   }, [milkType, dateBS]);
 
   const updateEntry = (farmerId: string, field: string, value: string) => {
