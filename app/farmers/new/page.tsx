@@ -25,7 +25,7 @@ export default function NewFarmer() {
       <h1 className="text-2xl font-bold mb-4">New Farmer</h1>
       <form onSubmit={handleSubmit} className="space-y-4 max-w-md">
         <div>
-          <label className="block text-sm font-medium mb-1">Name</label>
+          <label className="block text-sm font-medium mb-1">Name <span className="text-red-500">*</span></label>
           <input
             type="text"
             value={name}
@@ -40,7 +40,6 @@ export default function NewFarmer() {
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            required
             className="w-full px-4 py-3 min-h-touch border rounded-lg text-base"
           />
         </div>

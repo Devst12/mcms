@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { calculatePayment, getAdvances, getEntries } from "@/lib/db";
-import { ObjectId } from "mongodb";
 
 export async function POST(request: NextRequest) {
   try {
@@ -43,7 +42,7 @@ export async function POST(request: NextRequest) {
         finalAmount: result.finalAmount,
         paid: false,
       };
-      await db.collection("payments").insertOne({ ...payment, _id: new ObjectId(payment._id) });
+      await db.collection("payments").insertOne(payment);
       return NextResponse.json(payment, { status: 201 });
     }
 
@@ -52,12 +51,13 @@ export async function POST(request: NextRequest) {
 
     const results = [];
     for (const farmer of farmers) {
-      const result = await calculatePayment(farmer._id.toHexString(), batchMonth);
+      const fid = typeof farmer._id === 'string' ? farmer._id : farmer._id.toHexString();
+      const result = await calculatePayment(fid, batchMonth);
       if (!result || (result.cowTotal + result.buffaloTotal === 0)) continue;
 
-      const existing = await db.collection("payments").findOne({ farmerId: farmer._id.toHexString(), month: batchMonth });
+      const existing = await db.collection("payments").findOne({ farmerId: fid, month: batchMonth });
       const paymentData = {
-        farmerId: farmer._id.toHexString(),
+        farmerId: fid,
         month: batchMonth,
         milkType: "cow",
         totalLiters: result.cowTotal + result.buffaloTotal,
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
           _id: new ObjectId().toHexString(),
           ...paymentData,
         };
-        await db.collection("payments").insertOne({ ...payment, _id: new ObjectId(payment._id) });
+        await db.collection("payments").insertOne(payment);
         results.push(payment);
       }
     }
