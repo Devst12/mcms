@@ -82,6 +82,39 @@ export async function updateEntry(id: string, data: Partial<Entry>): Promise<Ent
   return result ?? null;
 }
 
+export async function updateEntryWithHistory(id: string, data: Partial<Entry>, reason?: string): Promise<Entry | null> {
+  const db = await getDb();
+  const existing = await db.collection<Entry>("entries").findOne({ _id: id });
+  if (!existing) return null;
+  const previousValues = {
+    morningQty: existing.morningQty,
+    eveningQty: existing.eveningQty,
+    fatPercent: existing.fatPercent,
+    rateUsed: existing.rateUsed,
+  };
+  const editHistory = [
+    ...(existing.editHistory || []),
+    { editedAt: new Date().toISOString(), previousValues, reason: reason || "correction" },
+  ];
+  const result = await db.collection<Entry>("entries").findOneAndUpdate(
+    { _id: id },
+    { $set: { ...data, editHistory } },
+    { returnDocument: "after" }
+  );
+  return result ?? null;
+}
+
+export async function getEntryById(id: string): Promise<Entry | null> {
+  const db = await getDb();
+  return db.collection<Entry>("entries").findOne({ _id: id });
+}
+
+export async function deleteEntry(id: string): Promise<boolean> {
+  const db = await getDb();
+  const result = await db.collection<Entry>("entries").deleteOne({ _id: id });
+  return result.deletedCount > 0;
+}
+
 export async function getCompanyCollections(dateFrom?: string, dateTo?: string, milkType?: string): Promise<CompanyCollection[]> {
   const db = await getDb();
   const query: Record<string, unknown> = {};

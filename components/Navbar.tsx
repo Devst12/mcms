@@ -71,7 +71,7 @@ export default function Navbar() {
             .map((r: { id: string }) => r.id)
         );
         for (const item of items) {
-          if (successIds.has(item.id)) {
+          if (item.id && successIds.has(item.id)) {
             await markSynced(item.collection, item.id);
           }
         }

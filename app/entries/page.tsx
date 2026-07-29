@@ -26,6 +26,8 @@ function EntriesInner() {
   const [period, setPeriod] = useState<Period>({ type: "thisMonth" });
   const [selectedFarmer, setSelectedFarmer] = useState(preselectedFarmer);
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ morning: "", evening: "", fat: "" });
 
   const fetchFarmers = useCallback(async () => {
     const res = await fetch("/api/farmers");
@@ -73,14 +75,41 @@ function EntriesInner() {
   }, [selectedFarmer, period, farmers]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchFarmers();
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadEntries();
   }, [loadEntries]);
+
+  const startEdit = (entry: EntryData) => {
+    setEditingId(entry._id);
+    setEditForm({ morning: String(entry.morningQty), evening: String(entry.eveningQty), fat: String(entry.fatPercent) });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({ morning: "", evening: "", fat: "" });
+  };
+
+  const saveEdit = async (entry: EntryData) => {
+    const morningQty = parseFloat(editForm.morning) || 0;
+    const eveningQty = parseFloat(editForm.evening) || 0;
+    const fatPercent = parseFloat(editForm.fat) || 0;
+    await fetch(`/api/entries/${entry._id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ morningQty, eveningQty, fatPercent, reason: "manual correction" }),
+    });
+    cancelEdit();
+    loadEntries();
+  };
+
+  const deleteEntry = async (id: string) => {
+    if (!confirm("Delete this entry? This cannot be undone.")) return;
+    await fetch(`/api/entries/${id}`, { method: "DELETE" });
+    loadEntries();
+  };
 
   const cowEntries = entries.filter((e) => e.milkType === "cow");
   const buffaloEntries = entries.filter((e) => e.milkType === "buffalo");
@@ -159,21 +188,57 @@ function EntriesInner() {
                       <th className="py-1 px-2 text-right">Fat %</th>
                       <th className="py-1 px-2 text-right">Rate</th>
                       <th className="py-1 px-2 text-right">Amount</th>
+                      <th className="py-1 px-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {dayEntries.map((e) => (
                       <tr key={e._id} className="border-b">
-                        <td className="py-1 px-2">{e.farmerName || e.farmerId}</td>
-                        <td className="py-1 px-2 capitalize">{e.milkType}</td>
-                        <td className="py-1 px-2 text-right">{e.morningQty.toFixed(1)}</td>
-                        <td className="py-1 px-2 text-right">{e.eveningQty.toFixed(1)}</td>
-                        <td className="py-1 px-2 text-right font-medium">{(e.morningQty + e.eveningQty).toFixed(1)}</td>
-                        <td className="py-1 px-2 text-right">{e.fatPercent.toFixed(1)}</td>
-                        <td className="py-1 px-2 text-right">{e.rateUsed.toFixed(2)}</td>
-                        <td className="py-1 px-2 text-right font-medium">
-                          Rs. {((e.morningQty + e.eveningQty) * e.rateUsed).toFixed(2)}
-                        </td>
+                        {editingId === e._id ? (
+                          <>
+                            <td className="py-1 px-2">{e.farmerName || e.farmerId}</td>
+                            <td className="py-1 px-2 capitalize">{e.milkType}</td>
+                            <td className="py-1 px-2 text-right">
+                              <input type="number" step="0.1" value={editForm.morning} onChange={(ev) => setEditForm({ ...editForm, morning: ev.target.value })} className="w-20 px-2 py-1 border rounded text-right" />
+                            </td>
+                            <td className="py-1 px-2 text-right">
+                              <input type="number" step="0.1" value={editForm.evening} onChange={(ev) => setEditForm({ ...editForm, evening: ev.target.value })} className="w-20 px-2 py-1 border rounded text-right" />
+                            </td>
+                            <td className="py-1 px-2 text-right">{(parseFloat(editForm.morning) || 0 + parseFloat(editForm.evening) || 0).toFixed(1)}</td>
+                            <td className="py-1 px-2 text-right">
+                              <input type="number" step="0.1" value={editForm.fat} onChange={(ev) => setEditForm({ ...editForm, fat: ev.target.value })} className="w-20 px-2 py-1 border rounded text-right" />
+                            </td>
+                            <td className="py-1 px-2 text-right">{e.rateUsed.toFixed(2)}</td>
+                            <td className="py-1 px-2 text-right font-medium">
+                              Rs. {((parseFloat(editForm.morning) || 0 + parseFloat(editForm.evening) || 0) * e.rateUsed).toFixed(2)}
+                            </td>
+                            <td className="py-1 px-2">
+                              <div className="flex gap-1">
+                                <button onClick={() => saveEdit(e)} className="px-2 py-1 bg-green-600 text-white rounded text-xs">Save</button>
+                                <button onClick={cancelEdit} className="px-2 py-1 bg-gray-600 text-white rounded text-xs">Cancel</button>
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="py-1 px-2">{e.farmerName || e.farmerId}</td>
+                            <td className="py-1 px-2 capitalize">{e.milkType}</td>
+                            <td className="py-1 px-2 text-right">{e.morningQty.toFixed(1)}</td>
+                            <td className="py-1 px-2 text-right">{e.eveningQty.toFixed(1)}</td>
+                            <td className="py-1 px-2 text-right font-medium">{(e.morningQty + e.eveningQty).toFixed(1)}</td>
+                            <td className="py-1 px-2 text-right">{e.fatPercent.toFixed(1)}</td>
+                            <td className="py-1 px-2 text-right">{e.rateUsed.toFixed(2)}</td>
+                            <td className="py-1 px-2 text-right font-medium">
+                              Rs. {((e.morningQty + e.eveningQty) * e.rateUsed).toFixed(2)}
+                            </td>
+                            <td className="py-1 px-2">
+                              <div className="flex gap-1">
+                                <button onClick={() => startEdit(e)} className="px-2 py-1 bg-blue-600 text-white rounded text-xs">Edit</button>
+                                <button onClick={() => deleteEntry(e._id)} className="px-2 py-1 bg-red-600 text-white rounded text-xs">Del</button>
+                              </div>
+                            </td>
+                          </>
+                        )}
                       </tr>
                     ))}
                   </tbody>

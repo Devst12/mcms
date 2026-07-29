@@ -43,22 +43,22 @@ export async function POST(request: NextRequest) {
         finalAmount: result.finalAmount,
         paid: false,
       };
-      await db.collection("payments").insertOne(payment);
+      await db.collection("payments").insertOne({ ...payment, _id: new ObjectId(payment._id) });
       return NextResponse.json(payment, { status: 201 });
     }
 
-    const month = body.month || new Date().toISOString().slice(0, 7);
+    const batchMonth = body.month || new Date().toISOString().slice(0, 7);
     const farmers = await db.collection("farmers").find({ active: true }).toArray();
 
     const results = [];
     for (const farmer of farmers) {
-      const result = await calculatePayment(farmer._id, month);
+      const result = await calculatePayment(farmer._id.toHexString(), batchMonth);
       if (!result || (result.cowTotal + result.buffaloTotal === 0)) continue;
 
-      const existing = await db.collection("payments").findOne({ farmerId: farmer._id, month });
+      const existing = await db.collection("payments").findOne({ farmerId: farmer._id.toHexString(), month: batchMonth });
       const paymentData = {
-        farmerId: farmer._id,
-        month,
+        farmerId: farmer._id.toHexString(),
+        month: batchMonth,
         milkType: "cow",
         totalLiters: result.cowTotal + result.buffaloTotal,
         milkAmount: result.milkAmount,
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
           _id: new ObjectId().toHexString(),
           ...paymentData,
         };
-        await db.collection("payments").insertOne(payment);
+        await db.collection("payments").insertOne({ ...payment, _id: new ObjectId(payment._id) });
         results.push(payment);
       }
     }

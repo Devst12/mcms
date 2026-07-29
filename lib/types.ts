@@ -27,7 +27,7 @@ export interface Entry {
   fatPercent: number;
   rateUsed: number;
   synced: boolean;
-  editHistory: string[];
+  editHistory: Array<{ editedAt: string; previousValues: { morningQty: number; eveningQty: number; fatPercent: number; rateUsed: number }; reason: string }>;
   createdAt: string;
 }
 

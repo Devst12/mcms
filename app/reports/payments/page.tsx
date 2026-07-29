@@ -1,10 +1,11 @@
-import { getPayments } from "@/lib/db";
+import { getPayments, getFarmers } from "@/lib/db";
 import PaymentsClient from "@/components/PaymentsClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function PaymentsPage() {
   const payments = await getPayments();
+  const farmers = await getFarmers();
   const currentMonth = new Date().toISOString().slice(0, 7);
 
   return (
@@ -18,7 +19,7 @@ export default async function PaymentsPage() {
           </button>
         </form>
       </div>
-      <PaymentsClient payments={payments} />
+      <PaymentsClient payments={payments} farmers={farmers} />
     </div>
   );
 }
