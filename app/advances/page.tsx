@@ -1,18 +1,37 @@
-import { getFarmers, getAdvances } from "@/lib/db";
+"use client";
+
+import { useState, useEffect } from "react";
 import AdvanceForm from "@/components/AdvanceForm";
 
-export const dynamic = "force-dynamic";
+export default function AdvancesPage() {
+  const [farmers, setFarmers] = useState<Array<{ _id: string; name: string; code: string }>>([]);
+  const [advances, setAdvances] = useState<Array<{
+    _id: string;
+    farmerId: string;
+    dateAD: string;
+    dateBS: string;
+    amount: number;
+    note: string;
+    settled: boolean;
+    createdAt: string;
+  }>>([]);
 
-export default async function AdvancesPage() {
-  const [farmers, advances] = await Promise.all([
-    getFarmers(),
-    getAdvances(),
-  ]);
+  useEffect(() => {
+    fetch("/api/farmers")
+      .then((r) => r.json())
+      .then(setFarmers);
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/advances")
+      .then((r) => r.json())
+      .then(setAdvances);
+  }, []);
 
   return (
     <div className="p-4 space-y-4">
       <h1 className="text-2xl font-bold">Advances 💰</h1>
-      <AdvanceForm farmers={farmers} onAdvanceAdded={() => {}} />
+      <AdvanceForm farmers={farmers} />
       <div className="p-4 bg-white rounded-xl border">
         <h2 className="font-semibold mb-2">Recent Advances</h2>
         <div className="space-y-2">
