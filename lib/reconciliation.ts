@@ -1,4 +1,4 @@
-import { getEntries, getCompanyCollections, getFarmerById } from "./db";
+import { getEntries, getCompanyCollections } from "./db";
 
 export type PeriodType = "thisMonth" | "twoMonths" | "thisYear" | "allTime" | "custom";
 
@@ -31,95 +31,50 @@ export function getPeriodDateRange(period: Period): { from: string; to: string }
     case "allTime":
       return { from: "2000-01-01", to: "2099-12-31" };
     case "custom":
-      return { from: period.from || `${year}-01-01`, to: period.to || `${year}-12-31` };
+      return { from: period.from || `${year}-01-01`, to: period.to || `${year}-12-31"` };
     default:
       return { from: `${year}-01-01`, to: `${year}-12-31` };
   }
 }
 
-export async function getFarmerTotals(
-  farmerId: string,
-  period: Period
-): Promise<{
-  cowMorning: number;
-  cowEvening: number;
-  buffaloMorning: number;
-  buffaloEvening: number;
-  cowAmount: number;
-  buffaloAmount: number;
+export async function getReconciliation(period: Period): Promise<{
+  cow: { farmerTotal: number; companyTotal: number; diff: number; diffPercent: number; status: "match" | "shortage" | "excess" };
+  buffalo: { farmerTotal: number; companyTotal: number; diff: number; diffPercent: number; status: "match" | "shortage" | "excess" };
+  combined: { farmerTotal: number; companyTotal: number; diff: number; diffPercent: number; status: "match" | "shortage" | "excess" };
 }> {
-  const { from, to } = getPeriodDateRange(period);
-  const entries = await getEntries(from, to, farmerId);
-  const cow = entries.filter((e) => e.milkType === "cow");
-  const buffalo = entries.filter((e) => e.milkType === "buffalo");
-  return {
-    cowMorning: cow.reduce((sum, e) => sum + e.morningQty, 0),
-    cowEvening: cow.reduce((sum, e) => sum + e.eveningQty, 0),
-    buffaloMorning: buffalo.reduce((sum, e) => sum + e.morningQty, 0),
-    buffaloEvening: buffalo.reduce((sum, e) => sum + e.eveningQty, 0),
-    cowAmount: cow.reduce((sum, e) => sum + (e.morningQty + e.eveningQty) * e.rateUsed, 0),
-    buffaloAmount: buffalo.reduce((sum, e) => sum + (e.morningQty + e.eveningQty) * e.rateUsed, 0),
-  };
-}
-
-export async function getReconciliation(period: Period): Promise<
-  Array<{
-    farmerId: string;
-    farmerName: string;
-    farmerCow: number;
-    farmerBuffalo: number;
-    companyCow: number;
-    companyBuffalo: number;
-    cowDiff: number;
-    buffaloDiff: number;
-    totalDiff: number;
-    status: "match" | "shortage" | "excess";
-  }>
-> {
   const { from, to } = getPeriodDateRange(period);
   const [entries, companyEntries] = await Promise.all([
     getEntries(from, to),
     getCompanyCollections(from, to),
   ]);
-  const farmerMap = new Map<string, { cow: number; buffalo: number }>();
-  for (const entry of entries) {
-    const current = farmerMap.get(entry.farmerId) || { cow: 0, buffalo: 0 };
-    if (entry.milkType === "cow") current.cow += entry.morningQty + entry.eveningQty;
-    else current.buffalo += entry.morningQty + entry.eveningQty;
-    farmerMap.set(entry.farmerId, current);
+
+  const totals = { cow: 0, buffalo: 0 };
+  for (const e of entries) {
+    totals[e.milkType] += e.morningQty + e.eveningQty;
   }
-  const companyMap = new Map<string, { cow: number; buffalo: number }>();
-  for (const comp of companyEntries) {
-    const key = `${comp.dateAD}_${comp.milkType}`;
-    companyMap.set(key, { cow: 0, buffalo: 0 });
+
+  const companyTotals = { cow: 0, buffalo: 0 };
+  for (const c of companyEntries) {
+    companyTotals[c.milkType] += c.reportedQty;
   }
-  const farmerIds = Array.from(farmerMap.keys());
-  const results = [];
-  for (const fid of farmerIds) {
-    const farmer = await getFarmerById(fid);
-    const totals = farmerMap.get(fid)!;
-    const companyCow = companyEntries
-      .filter((c) => c.milkType === "cow")
-      .reduce((sum, c) => sum + c.reportedQty, 0);
-    const companyBuffalo = companyEntries
-      .filter((c) => c.milkType === "buffalo")
-      .reduce((sum, c) => sum + c.reportedQty, 0);
-    const cowDiff = totals.cow - companyCow;
-    const buffaloDiff = totals.buffalo - companyBuffalo;
-    const totalDiff = cowDiff + buffaloDiff;
-    const status: "match" | "shortage" | "excess" = totalDiff === 0 ? "match" : totalDiff < 0 ? "shortage" : "excess";
-    results.push({
-      farmerId: fid,
-      farmerName: farmer?.name || "Unknown",
-      farmerCow: totals.cow,
-      farmerBuffalo: totals.buffalo,
-      companyCow,
-      companyBuffalo,
-      cowDiff,
-      buffaloDiff,
-      totalDiff,
-      status,
-    });
-  }
-  return results;
+
+  const calc = (type: "cow" | "buffalo") => {
+    const farmerTotal = totals[type];
+    const companyTotal = companyTotals[type];
+    const diff = farmerTotal - companyTotal;
+    const diffPercent = companyTotal ? (diff / companyTotal) * 100 : 0;
+    const status: "match" | "shortage" | "excess" = Math.abs(diffPercent) < 1 ? "match" : diff > 0 ? "excess" : "shortage";
+    return { farmerTotal, companyTotal, diff, diffPercent, status };
+  };
+
+  const cow = calc("cow");
+  const buffalo = calc("buffalo");
+  const combined = calc("cow");
+  combined.farmerTotal = cow.farmerTotal + buffalo.farmerTotal;
+  combined.companyTotal = cow.companyTotal + buffalo.companyTotal;
+  combined.diff = combined.farmerTotal - combined.companyTotal;
+  combined.diffPercent = combined.companyTotal ? (combined.diff / combined.companyTotal) * 100 : 0;
+  combined.status = Math.abs(combined.diffPercent) < 1 ? "match" : combined.diff > 0 ? "excess" : "shortage";
+
+  return { cow, buffalo, combined };
 }

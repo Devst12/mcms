@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Users, FileText, Building2, BarChart3, Scale, Wallet, Receipt, Settings, RefreshCw, ClipboardList } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getUnsyncedItems, markSynced, clearSyncQueue } from "@/lib/indexed-db";
 
 const navItems = [
   { href: "/", label: "Home", icon: Home },
@@ -22,9 +23,64 @@ export default function Navbar() {
   const pathname = usePathname();
   const [pendingSync, setPendingSync] = useState(0);
 
+  const updatePendingCount = async () => {
+    try {
+      const entries = await getUnsyncedItems("entries");
+      const companies = await getUnsyncedItems("company_collections");
+      const advances = await getUnsyncedItems("advances");
+      setPendingSync(entries.length + companies.length + advances.length);
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    updatePendingCount();
+    const interval = setInterval(updatePendingCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleSync = async () => {
-    setPendingSync(0);
-    await fetch("/api/sync", { method: "POST" });
+    try {
+      const entries = await getUnsyncedItems("entries");
+      const companies = await getUnsyncedItems("company_collections");
+      const advances = await getUnsyncedItems("advances");
+
+      const items = [
+        ...entries.map((e: Record<string, unknown>) => ({ id: (e as { id?: string }).id, collection: "entries", data: e })),
+        ...companies.map((c: Record<string, unknown>) => ({ id: (c as { id?: string }).id, collection: "company_collections", data: c })),
+        ...advances.map((a: Record<string, unknown>) => ({ id: (a as { id?: string }).id, collection: "advances", data: a })),
+      ];
+
+      if (items.length === 0) {
+        setPendingSync(0);
+        return;
+      }
+
+      const res = await fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        const successIds = new Set(
+          (result.results || [])
+            .filter((r: { success: boolean }) => r.success)
+            .map((r: { id: string }) => r.id)
+        );
+        for (const item of items) {
+          if (successIds.has(item.id)) {
+            await markSynced(item.collection, item.id);
+          }
+        }
+        await clearSyncQueue();
+        setPendingSync(0);
+      }
+    } catch (err) {
+      console.error("Sync failed", err);
+    }
   };
 
   return (

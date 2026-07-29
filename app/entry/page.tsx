@@ -14,6 +14,17 @@ interface Farmer {
   code: string;
 }
 
+function resolveRate(fatPercent: number, slabs: { minFat: number; maxFat: number; rate: number }[]): number {
+  if (!slabs.length || fatPercent <= 0) return 0;
+  const slab = slabs.find(s => fatPercent >= s.minFat && fatPercent < s.maxFat);
+  if (!slab) {
+    const last = slabs[slabs.length - 1];
+    if (fatPercent >= last.minFat) return last.rate;
+    return slabs[0]?.rate || 0;
+  }
+  return slab.rate;
+}
+
 function DailyEntryInner() {
   const searchParams = useSearchParams();
   const preselectedFarmer = searchParams.get("farmerId") || "";
@@ -21,12 +32,27 @@ function DailyEntryInner() {
   const [milkType, setMilkType] = useState<"cow" | "buffalo">("cow");
   const [dateBS, setDateBS] = useState(getTodayBs());
   const [entries, setEntries] = useState<Record<string, { morning: string; evening: string; fat: string }>>({});
+  const [slabs, setSlabs] = useState<{ minFat: number; maxFat: number; rate: number }[]>([]);
+  const [ratesLoaded, setRatesLoaded] = useState(false);
 
   useEffect(() => {
     fetch("/api/farmers")
       .then((r) => r.json())
       .then(setFarmers);
   }, []);
+
+  useEffect(() => {
+    const loadSlabs = async () => {
+      const dateAd = await (await import("@/lib/nepali-dates")).bsToAd(dateBS);
+      const res = await fetch(`/api/rates?milkType=${milkType}&dateAD=${dateAd}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSlabs(data?.slabs || []);
+      }
+      setRatesLoaded(true);
+    };
+    loadSlabs();
+  }, [milkType, dateBS]);
 
   const updateEntry = (farmerId: string, field: string, value: string) => {
     setEntries((prev) => ({
@@ -41,6 +67,7 @@ function DailyEntryInner() {
     const morningQty = parseFloat(e.morning) || 0;
     const eveningQty = parseFloat(e.evening) || 0;
     const fatPercent = parseFloat(e.fat) || 0;
+    const rateUsed = resolveRate(fatPercent, slabs);
     const dateAd = await (await import("@/lib/nepali-dates")).bsToAd(dateBS);
     const entry = {
       id: `${dateBS}_${farmerId}_${milkType}_${Date.now()}`,
@@ -51,7 +78,7 @@ function DailyEntryInner() {
       morningQty,
       eveningQty,
       fatPercent,
-      rateUsed: 0,
+      rateUsed,
       synced: false,
       editHistory: [],
       createdAt: new Date().toISOString(),
@@ -77,6 +104,13 @@ function DailyEntryInner() {
     });
   };
 
+  const getRateForFarmer = (farmerId: string) => {
+    const e = entries[farmerId];
+    if (!e || !e.fat) return null;
+    const fat = parseFloat(e.fat) || 0;
+    return resolveRate(fat, slabs);
+  };
+
   return (
     <div className="p-4 space-y-4">
       <h1 className="text-2xl font-bold">Daily Entry 📝</h1>
@@ -92,10 +126,16 @@ function DailyEntryInner() {
       <div className="space-y-3">
         {farmers.map((f) => {
           const e = entries[f._id] || {};
+          const previewRate = getRateForFarmer(f._id);
           return (
             <div key={f._id} className={`p-4 rounded-xl border ${preselectedFarmer === f._id ? "border-blue-500 bg-blue-50" : "bg-white"}`}>
               <div className="flex items-center justify-between mb-2">
                 <p className="font-semibold text-large">{f.name} ({f.code})</p>
+                {previewRate !== null && (
+                  <span className="text-sm font-medium text-green-700 bg-green-100 px-2 py-1 rounded-full">
+                    Rate: Rs. {previewRate}/L
+                  </span>
+                )}
               </div>
               <div className="grid grid-cols-4 gap-2">
                 <div>

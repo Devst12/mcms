@@ -19,9 +19,20 @@ export default async function FarmerDetail({ params }: { params: Promise<{ id: s
           <h1 className="text-2xl font-bold">{farmer.name}</h1>
           <p className="text-gray-600">{farmer.code} | {farmer.phone}</p>
         </div>
-        <Link href={`/slip/${id}`} className="px-4 py-3 min-h-touch bg-blue-600 text-white rounded-lg font-medium">
-          View Slip
-        </Link>
+        <div className="flex gap-2">
+          <Link href={`/slip/${id}`} className="px-4 py-3 min-h-touch bg-blue-600 text-white rounded-lg font-medium">
+            View Slip
+          </Link>
+          <form action={`/api/farmers/${id}/delete`} method="POST" onSubmit={(e) => {
+            if (!confirm(`Delete farmer ${farmer.name}? This cannot be undone.`)) {
+              e.preventDefault();
+            }
+          }}>
+            <button type="submit" className="px-4 py-3 min-h-touch bg-red-600 text-white rounded-lg font-medium">
+              Delete
+            </button>
+          </form>
+        </div>
       </div>
       <div className="p-4 bg-white rounded-xl border">
         <h2 className="font-semibold mb-2">Info</h2>
@@ -42,6 +53,9 @@ export default async function FarmerDetail({ params }: { params: Promise<{ id: s
                 <p className="text-sm text-gray-600">
                   M: {e.morningQty}L | E: {e.eveningQty}L | Fat: {e.fatPercent}%
                 </p>
+                {e.editHistory && e.editHistory.length > 0 && (
+                  <p className="text-xs text-gray-400">Edited {e.editHistory.length} time(s)</p>
+                )}
               </div>
               <p className="font-bold">Rs. {((e.morningQty + e.eveningQty) * e.rateUsed).toFixed(2)}</p>
             </div>
