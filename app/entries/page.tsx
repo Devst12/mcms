@@ -74,11 +74,13 @@ function EntriesInner() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadEntries();
   }, [loadEntries]);
 
   useEffect(() => {
     if (farmers.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEntries((prev) =>
       prev.map((e) => ({
         ...e,
