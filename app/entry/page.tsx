@@ -2,7 +2,6 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import MilkTypeToggle from "@/components/MilkTypeToggle";
 import { getTodayBs } from "@/lib/nepali-dates";
 import { saveEntryLocal, queueForSync } from "@/lib/indexed-db";
 
@@ -16,16 +15,29 @@ interface Farmer {
 }
 
 type SessionKey = "morning" | "evening";
+type MilkTypeKey = "cow" | "buffalo";
 
 interface SessionState {
   _id?: string;
   farmerId: string;
+  milkType: MilkTypeKey;
   session: SessionKey;
   qty: string;
   fat: string;
   rateUsed: number | null;
   saved: boolean;
   saving: boolean;
+}
+
+interface MilkTypeBlockProps {
+  farmerId: string;
+  milkType: MilkTypeKey;
+  sessions: Record<string, SessionState>;
+  slabs: { minFat: number; maxFat: number; rate: number }[];
+  savingKeys: Record<string, boolean>;
+  onFieldChange: (farmerId: string, milkType: MilkTypeKey, session: SessionKey, field: string, value: string) => void;
+  onSave: (farmerId: string, milkType: MilkTypeKey, session: SessionKey) => void;
+  onDelete: (farmerId: string, milkType: MilkTypeKey, session: SessionKey) => void;
 }
 
 function resolveRate(fatPercent: number, slabs: { minFat: number; maxFat: number; rate: number }[]): number {
@@ -39,215 +51,136 @@ function resolveRate(fatPercent: number, slabs: { minFat: number; maxFat: number
   return slab.rate;
 }
 
-function FarmerEntryRow({
-  farmer,
-  milkType,
-  dateBS,
-  slabs,
-  sessions,
-  savingKeys,
-  onFieldChange,
-  onSave,
-  onDelete,
-  preselected,
-}: {
-  farmer: Farmer;
-  milkType: "cow" | "buffalo";
-  dateBS: string;
-  slabs: { minFat: number; maxFat: number; rate: number }[];
-  sessions: Record<string, SessionState>;
-  savingKeys: Record<string, boolean>;
-  onFieldChange: (farmerId: string, session: SessionKey, field: string, value: string) => void;
-  onSave: (farmerId: string, session: SessionKey) => void;
-  onDelete: (farmerId: string, session: SessionKey) => void;
-  preselected: boolean;
+function SessionCard({ session, state, ratePreview, saving, onChange, onSave, onDelete }: {
+  session: SessionKey;
+  state?: SessionState;
+  ratePreview: number | null;
+  saving: boolean;
+  onChange: (field: string, value: string) => void;
+  onSave: () => void;
+  onDelete: () => void;
 }) {
-  const getRate = (farmerId: string, session: SessionKey) => {
-    const e = sessions[`${farmerId}_${session}`];
-    if (!e || !e.fat) return null;
-    const fat = parseFloat(e.fat) || 0;
-    return resolveRate(fat, slabs);
-  };
-
-  const morningState = sessions[`${farmer._id}_morning`];
-  const eveningState = sessions[`${farmer._id}_evening`];
-  const mornRate = getRate(farmer._id, "morning");
-  const eveRate = getRate(farmer._id, "evening");
+  const isSaved = !!state?.saved;
+  const qty = state?.qty || "";
+  const fat = state?.fat || "";
 
   return (
-    <div
-      className={`card ${preselected ? "border-blue-500 bg-blue-50" : ""}`}
-    >
-      {/* Farmer header */}
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <p className="font-bold text-base">{farmer.name}</p>
-          <p className="text-xs text-gray-600">
-            {farmer.code}
-            {farmer.phone ? ` | ${farmer.phone}` : ""}
-          </p>
-        </div>
-        {morningState?.saved && eveningState?.saved && (
-          <span className="px-3 py-1 bg-green-100 text-green-700 border-2 border-green-400 rounded-full text-xs font-bold">
-            ✓ Done
-          </span>
-        )}
-      </div>
-
-      {/* Two-column session inputs */}
-      <div className="grid grid-cols-5 gap-2">
-        {/* Morning */}
-        <div className="col-span-2 space-y-2">
-          <p className="text-xs font-bold text-gray-600">☀️ Morning</p>
-          {!morningState?.saved ? (
-            <>
-              <div>
-                <label className="text-[10px] text-gray-500">Liters</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  inputMode="decimal"
-                  value={morningState?.qty || ""}
-                  onChange={(e) => onFieldChange(farmer._id, "morning", "qty", e.target.value)}
-                  className="w-full px-3 py-3 border-2 border-gray-800 rounded-xl text-base font-bold bg-white text-center tabular-nums focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-                  placeholder="0.0"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-500">Fat %</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  inputMode="decimal"
-                  value={morningState?.fat || ""}
-                  onChange={(e) => onFieldChange(farmer._id, "morning", "fat", e.target.value)}
-                  className="w-full px-3 py-3 border-2 border-gray-800 rounded-xl text-base font-bold bg-white text-center tabular-nums focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-                  placeholder="0.0"
-                />
-              </div>
-              {mornRate !== null && morningState?.qty && (
-                <div className="bg-green-50 border-2 border-green-300 rounded-xl px-3 py-2 text-center">
-                  <p className="text-xs text-gray-600">Amount</p>
-                  <p className="text-base font-bold text-green-700 tabular-nums">
-                    Rs. {((parseFloat(morningState.qty) || 0) * mornRate).toFixed(2)}
-                  </p>
-                  <p className="text-[10px] text-gray-500">@ Rs. {mornRate}/L</p>
-                </div>
-              )}
-              <button
-                onClick={() => onSave(farmer._id, "morning")}
-                disabled={savingKeys[`${farmer._id}_morning`] || !morningState?.qty}
-                className="w-full px-3 py-3 min-h-touch bg-green-600 text-white rounded-xl font-bold text-sm shadow-[2px_2px_0_rgba(0,0,0,0.2)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-40 disabled:shadow-none"
-              >
-                {savingKeys[`${farmer._id}_morning`] ? "Saving..." : "Save ☀️"}
-              </button>
-            </>
-          ) : (
-            <div className="bg-green-50 border-2 border-green-300 rounded-xl p-3 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600">Liters</span>
-                <span className="font-bold tabular-nums">{morningState.qty} L</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600">Fat %</span>
-                <span className="font-bold tabular-nums">{morningState.fat}%</span>
-              </div>
-              {mornRate && (
-                <div className="flex items-center justify-between border-t border-green-200 pt-1">
-                  <span className="text-xs text-gray-600">Amount</span>
-                  <span className="font-bold text-green-700 tabular-nums">
-                    Rs. {((parseFloat(morningState.qty) || 0) * mornRate).toFixed(2)}
-                  </span>
-                </div>
-              )}
-              <button
-                onClick={() => onDelete(farmer._id, "morning")}
-                className="w-full px-2 py-2 min-h-touch bg-red-100 text-red-700 border-2 border-red-300 rounded-lg text-xs font-bold"
-              >
-                ✕ Remove
-              </button>
+    <div className={`rounded-xl border-2 p-3 space-y-2 ${isSaved ? "bg-green-50 border-green-300 opacity-80" : "bg-white border-gray-800"}`}>
+      <p className="text-xs font-bold text-gray-600">{session === "morning" ? "☀️ Morning" : "🌙 Evening"}</p>
+      {!isSaved ? (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-gray-500 font-bold">Liters</label>
+              <input
+                type="number"
+                step="0.1"
+                inputMode="decimal"
+                value={qty}
+                onChange={(e) => onChange("qty", e.target.value)}
+                className="w-full px-3 py-3 border-2 border-gray-800 rounded-xl text-base font-bold bg-white text-center tabular-nums"
+                placeholder="0.0"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 font-bold">Fat %</label>
+              <input
+                type="number"
+                step="0.1"
+                inputMode="decimal"
+                value={fat}
+                onChange={(e) => onChange("fat", e.target.value)}
+                className="w-full px-3 py-3 border-2 border-gray-800 rounded-xl text-base font-bold bg-white text-center tabular-nums"
+                placeholder="0.0"
+              />
+            </div>
+          </div>
+          {ratePreview !== null && qty && (
+            <div className="bg-green-50 border-2 border-green-300 rounded-xl px-3 py-2 text-center">
+              <p className="text-xs text-gray-600">Amount</p>
+              <p className="text-base font-bold text-green-700 tabular-nums">
+                Rs. {((parseFloat(qty) || 0) * ratePreview).toFixed(2)}
+              </p>
+              <p className="text-[10px] text-gray-500">@ Rs. {ratePreview}/L</p>
             </div>
           )}
-        </div>
-
-        {/* Spacer */}
-        <div className="col-span-1 flex items-center justify-center">
-          <div className="h-full w-0.5 bg-gray-200" />
-        </div>
-
-        {/* Evening */}
-        <div className="col-span-2 space-y-2">
-          <p className="text-xs font-bold text-gray-600">🌙 Evening</p>
-          {!eveningState?.saved ? (
-            <>
-              <div>
-                <label className="text-[10px] text-gray-500">Liters</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  inputMode="decimal"
-                  value={eveningState?.qty || ""}
-                  onChange={(e) => onFieldChange(farmer._id, "evening", "qty", e.target.value)}
-                  className="w-full px-3 py-3 border-2 border-gray-800 rounded-xl text-base font-bold bg-white text-center tabular-nums focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-                  placeholder="0.0"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-500">Fat %</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  inputMode="decimal"
-                  value={eveningState?.fat || ""}
-                  onChange={(e) => onFieldChange(farmer._id, "evening", "fat", e.target.value)}
-                  className="w-full px-3 py-3 border-2 border-gray-800 rounded-xl text-base font-bold bg-white text-center tabular-nums focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-                  placeholder="0.0"
-                />
-              </div>
-              {eveRate !== null && eveningState?.qty && (
-                <div className="bg-green-50 border-2 border-green-300 rounded-xl px-3 py-2 text-center">
-                  <p className="text-xs text-gray-600">Amount</p>
-                  <p className="text-base font-bold text-green-700 tabular-nums">
-                    Rs. {((parseFloat(eveningState.qty) || 0) * eveRate).toFixed(2)}
-                  </p>
-                  <p className="text-[10px] text-gray-500">@ Rs. {eveRate}/L</p>
-                </div>
-              )}
-              <button
-                onClick={() => onSave(farmer._id, "evening")}
-                disabled={savingKeys[`${farmer._id}_evening`] || !eveningState?.qty}
-                className="w-full px-3 py-3 min-h-touch bg-blue-800 text-white rounded-xl font-bold text-sm shadow-[2px_2px_0_rgba(0,0,0,0.2)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] transition-all disabled:opacity-40 disabled:shadow-none"
-              >
-                {savingKeys[`${farmer._id}_evening`] ? "Saving..." : "Save 🌙"}
-              </button>
-            </>
-          ) : (
-            <div className="bg-indigo-50 border-2 border-indigo-300 rounded-xl p-3 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600">Liters</span>
-                <span className="font-bold tabular-nums">{eveningState.qty} L</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600">Fat %</span>
-                <span className="font-bold tabular-nums">{eveningState.fat}%</span>
-              </div>
-              {eveRate && (
-                <div className="flex items-center justify-between border-t border-indigo-200 pt-1">
-                  <span className="text-xs text-gray-600">Amount</span>
-                  <span className="font-bold text-indigo-700 tabular-nums">
-                    Rs. {((parseFloat(eveningState.qty) || 0) * eveRate).toFixed(2)}
-                  </span>
-                </div>
-              )}
-              <button
-                onClick={() => onDelete(farmer._id, "evening")}
-                className="w-full px-2 py-2 min-h-touch bg-red-100 text-red-700 border-2 border-red-300 rounded-lg text-xs font-bold"
-              >
-                ✕ Remove
-              </button>
+          <button
+            onClick={onSave}
+            disabled={saving || !qty}
+            className="w-full px-3 py-3 min-h-touch bg-green-600 text-white rounded-xl font-bold text-sm disabled:opacity-40"
+          >
+            {saving ? "Saving..." : `Save ${session === "morning" ? "☀️" : "🌙"}`}
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-600">Liters</span>
+            <span className="font-bold tabular-nums">{qty} L</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray-600">Fat %</span>
+            <span className="font-bold tabular-nums">{fat}%</span>
+          </div>
+          {ratePreview !== null && (
+            <div className="flex items-center justify-between border-t border-green-200 pt-1">
+              <span className="text-xs text-gray-600">Amount</span>
+              <span className="font-bold text-green-700 tabular-nums">
+                Rs. {((parseFloat(qty) || 0) * ratePreview).toFixed(2)}
+              </span>
             </div>
           )}
-        </div>
+          <button
+            onClick={onDelete}
+            className="w-full px-2 py-2 min-h-touch bg-red-100 text-red-700 border-2 border-red-300 rounded-lg text-xs font-bold"
+          >
+            ✕ Remove
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function MilkTypeBlock({ farmerId, milkType, sessions, slabs, savingKeys, onFieldChange, onSave, onDelete }: MilkTypeBlockProps) {
+  const mornKey = `${farmerId}_${milkType}_morning`;
+  const eveKey = `${farmerId}_${milkType}_evening`;
+  const mornState = sessions[mornKey];
+  const eveState = sessions[eveKey];
+
+  const getRate = (session: SessionKey) => {
+    const e = sessions[`${farmerId}_${milkType}_${session}`];
+    if (!e || !e.fat) return null;
+    return resolveRate(parseFloat(e.fat) || 0, slabs);
+  };
+
+  const hasAny = mornState?.saved || eveState?.saved || !mornState?.saved || !eveState?.saved;
+
+  if (!hasAny && Object.keys(sessions).filter((k) => k.startsWith(`${farmerId}_${milkType}_`)).length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <SessionCard
+          session="morning"
+          state={mornState}
+          ratePreview={getRate("morning")}
+          saving={!!savingKeys[mornKey]}
+          onChange={(field, value) => onFieldChange(farmerId, milkType, "morning", field, value)}
+          onSave={() => onSave(farmerId, milkType, "morning")}
+          onDelete={() => onDelete(farmerId, milkType, "morning")}
+        />
+        <SessionCard
+          session="evening"
+          state={eveState}
+          ratePreview={getRate("evening")}
+          saving={!!savingKeys[eveKey]}
+          onChange={(field, value) => onFieldChange(farmerId, milkType, "evening", field, value)}
+          onSave={() => onSave(farmerId, milkType, "evening")}
+          onDelete={() => onDelete(farmerId, milkType, "evening")}
+        />
       </div>
     </div>
   );
@@ -257,45 +190,48 @@ function DailyEntryInner() {
   const searchParams = useSearchParams();
   const preselectedFarmer = searchParams.get("farmerId") || "";
   const [farmers, setFarmers] = useState<Farmer[]>([]);
-  const [milkType, setMilkType] = useState<"cow" | "buffalo">("cow");
   const [dateBS, setDateBS] = useState(getTodayBs());
-  const [slabs, setSlabs] = useState<{ minFat: number; maxFat: number; rate: number }[]>([]);
+  const [cowSlabs, setCowSlabs] = useState<{ minFat: number; maxFat: number; rate: number }[]>([]);
+  const [buffaloSlabs, setBuffaloSlabs] = useState<{ minFat: number; maxFat: number; rate: number }[]>([]);
   const [sessions, setSessions] = useState<Record<string, SessionState>>({});
   const [savingKeys, setSavingKeys] = useState<Record<string, boolean>>({});
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [groupByFarmer, setGroupByFarmer] = useState(true);
   const [totalLiters, setTotalLiters] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
 
-  // Load farmers
   useEffect(() => {
     fetch("/api/farmers")
       .then((r) => r.json())
       .then(setFarmers);
   }, []);
 
-  // Load rate slabs
   useEffect(() => {
     let cancelled = false;
     const loadSlabs = async () => {
       const dateAd = await (await import("@/lib/nepali-dates")).bsToAd(dateBS);
-      const res = await fetch(`/api/rates?milkType=${milkType}&dateAD=${dateAd}`);
-      if (res.ok && !cancelled) {
-        const data = await res.json();
-        setSlabs(data?.slabs || []);
+      const [cowRes, bufRes] = await Promise.all([
+        fetch(`/api/rates?milkType=cow&dateAD=${dateAd}`),
+        fetch(`/api/rates?milkType=buffalo&dateAD=${dateAd}`),
+      ]);
+      if (!cancelled) {
+        if (cowRes.ok) {
+          const data = await cowRes.json();
+          setCowSlabs(data?.slabs || []);
+        }
+        if (bufRes.ok) {
+          const data = await bufRes.json();
+          setBuffaloSlabs(data?.slabs || []);
+        }
       }
     };
     loadSlabs();
-    return () => {
-      cancelled = true;
-    };
-  }, [milkType, dateBS]);
+    return () => { cancelled = true; };
+  }, [dateBS]);
 
-  // Load existing entries for the day
   useEffect(() => {
     let cancelled = false;
     const loadDayEntries = async () => {
-      if (!dateBS || !milkType) {
+      if (!dateBS) {
         setSessions({});
         return;
       }
@@ -303,7 +239,6 @@ function DailyEntryInner() {
       const params = new URLSearchParams({
         dateFrom: dateAd,
         dateTo: dateAd,
-        milkType: milkType,
       });
       try {
         const res = await fetch(`/api/entries?${params}`);
@@ -311,6 +246,7 @@ function DailyEntryInner() {
         const data = (await res.json()) as Array<{
           _id: string;
           farmerId: string;
+          milkType: string;
           session?: string;
           morningQty: number;
           eveningQty: number;
@@ -324,34 +260,22 @@ function DailyEntryInner() {
         let totalAmt = 0;
         for (const e of data) {
           const sess = e.session as SessionState["session"];
-          if (sess === "morning") {
-            const key = `${e.farmerId}_morning`;
+          if (sess === "morning" || sess === "evening") {
+            const key = `${e.farmerId}_${e.milkType}_${sess}`;
             next[key] = {
               _id: e._id,
               farmerId: e.farmerId,
-              session: "morning",
-              qty: String(e.morningQty),
+              milkType: e.milkType as MilkTypeKey,
+              session: sess,
+              qty: sess === "morning" ? String(e.morningQty) : String(e.eveningQty),
               fat: String(e.fatPercent),
               rateUsed: e.rateUsed,
               saved: true,
               saving: false,
             };
-            totalL += e.morningQty;
-            totalAmt += e.morningQty * e.rateUsed;
-          } else if (sess === "evening") {
-            const key = `${e.farmerId}_evening`;
-            next[key] = {
-              _id: e._id,
-              farmerId: e.farmerId,
-              session: "evening",
-              qty: String(e.eveningQty),
-              fat: String(e.fatPercent),
-              rateUsed: e.rateUsed,
-              saved: true,
-              saving: false,
-            };
-            totalL += e.eveningQty;
-            totalAmt += e.eveningQty * e.rateUsed;
+            const qtyVal = sess === "morning" ? e.morningQty : e.eveningQty;
+            totalL += qtyVal;
+            totalAmt += qtyVal * e.rateUsed;
           }
         }
         setSessions(next);
@@ -362,13 +286,11 @@ function DailyEntryInner() {
       }
     };
     loadDayEntries();
-    return () => {
-      cancelled = true;
-    };
-  }, [dateBS, milkType]);
+    return () => { cancelled = true; };
+  }, [dateBS]);
 
-  const handleFieldChange = (farmerId: string, session: SessionKey, field: string, value: string) => {
-    const key = `${farmerId}_${session}`;
+  const handleFieldChange = (farmerId: string, milkType: MilkTypeKey, session: SessionKey, field: string, value: string) => {
+    const key = `${farmerId}_${milkType}_${session}`;
     setSessions((prev) => {
       const next = { ...prev };
       const current = next[key];
@@ -376,6 +298,7 @@ function DailyEntryInner() {
         next[key] = {
           _id: undefined,
           farmerId,
+          milkType,
           session,
           qty: field === "qty" ? value : "",
           fat: field === "fat" ? value : "",
@@ -390,8 +313,8 @@ function DailyEntryInner() {
     });
   };
 
-  const saveSession = async (farmerId: string, session: SessionKey) => {
-    const key = `${farmerId}_${session}`;
+  const saveSession = async (farmerId: string, milkType: MilkTypeKey, session: SessionKey) => {
+    const key = `${farmerId}_${milkType}_${session}`;
     const e = sessions[key];
     if (!e) return;
 
@@ -402,6 +325,7 @@ function DailyEntryInner() {
     }
 
     const fatPercent = parseFloat(e.fat) || 0;
+    const slabs = milkType === "cow" ? cowSlabs : buffaloSlabs;
     const rateUsed = resolveRate(fatPercent, slabs);
     const dateAd = await (await import("@/lib/nepali-dates")).bsToAd(dateBS);
     const morningQty = session === "morning" ? qty : 0;
@@ -440,6 +364,7 @@ function DailyEntryInner() {
         [key]: {
           _id: saved._id,
           farmerId,
+          milkType,
           session,
           qty: String(qty),
           fat: String(fatPercent),
@@ -450,14 +375,13 @@ function DailyEntryInner() {
       }));
       setTotalLiters((prev) => prev + qty);
       setTotalAmount((prev) => prev + qty * rateUsed);
-    } catch (err) {
-      console.error("Save entry failed", err);
-      // Keep it as optimistic - user can see it saved locally even if server failed
+    } catch {
       setSessions((prev) => ({
         ...prev,
         [key]: {
           _id: localId,
           farmerId,
+          milkType,
           session,
           qty: String(qty),
           fat: String(fatPercent),
@@ -473,8 +397,8 @@ function DailyEntryInner() {
     }
   };
 
-  const deleteSession = async (farmerId: string, session: SessionKey) => {
-    const key = `${farmerId}_${session}`;
+  const deleteSession = async (farmerId: string, milkType: MilkTypeKey, session: SessionKey) => {
+    const key = `${farmerId}_${milkType}_${session}`;
     const e = sessions[key];
     if (!e?._id) return;
 
@@ -496,15 +420,21 @@ function DailyEntryInner() {
   };
 
   const activeFarmers = farmers.filter((f) => {
-    const hasMorning = sessions[`${f._id}_morning`]?.saved;
-    const hasEvening = sessions[`${f._id}_evening`]?.saved;
-    return !hasMorning || !hasEvening;
+    const cowMorn = sessions[`${f._id}_cow_morning`]?.saved;
+    const cowEve = sessions[`${f._id}_cow_evening`]?.saved;
+    const bufMorn = sessions[`${f._id}_buffalo_morning`]?.saved;
+    const bufEve = sessions[`${f._id}_buffalo_evening`]?.saved;
+    const cowDone = cowMorn && cowEve;
+    const bufDone = bufMorn && bufEve;
+    return !cowDone || !bufDone;
   });
 
   const completedFarmers = farmers.filter((f) => {
-    const hasMorning = sessions[`${f._id}_morning`]?.saved;
-    const hasEvening = sessions[`${f._id}_evening`]?.saved;
-    return hasMorning && hasEvening;
+    const cowMorn = sessions[`${f._id}_cow_morning`]?.saved;
+    const cowEve = sessions[`${f._id}_cow_evening`]?.saved;
+    const bufMorn = sessions[`${f._id}_buffalo_morning`]?.saved;
+    const bufEve = sessions[`${f._id}_buffalo_evening`]?.saved;
+    return (cowMorn && cowEve) || (bufMorn && bufEve);
   });
 
   return (
@@ -514,9 +444,8 @@ function DailyEntryInner() {
         <h1 className="text-2xl font-bold">Collect Milk</h1>
       </div>
 
-      {/* Controls: Milk type + Date */}
+      {/* Date */}
       <div className="card">
-        <MilkTypeToggle value={milkType} onChange={setMilkType} />
         <button
           onClick={() => setShowDatePicker(!showDatePicker)}
           className="flex items-center justify-center gap-2 w-full px-4 py-3 min-h-touch bg-gray-100 border-2 border-gray-800 rounded-xl text-base font-bold"
@@ -544,20 +473,13 @@ function DailyEntryInner() {
       <div className="card bg-blue-50 border-blue-400">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-bold text-gray-700">
-              {milkType === "cow" ? "🐄 Cow" : "🐃 Buffalo"} — Today
-            </p>
+            <p className="text-sm font-bold text-gray-700">Today&apos;s Total</p>
             <p className="text-xs text-gray-600">{dateBS}</p>
           </div>
           <div className="text-right">
-            <p className="text-xs text-gray-600">Total</p>
-            <p className="text-xl font-bold tabular-nums text-blue-800">
-              {totalLiters.toFixed(1)} L
-            </p>
+            <p className="text-xl font-bold tabular-nums text-blue-800">{totalLiters.toFixed(1)} L</p>
             {totalAmount > 0 && (
-              <p className="text-sm font-bold tabular-nums text-green-700">
-                Rs. {totalAmount.toFixed(2)}
-              </p>
+              <p className="text-sm font-bold tabular-nums text-green-700">Rs. {totalAmount.toFixed(2)}</p>
             )}
           </div>
         </div>
@@ -566,25 +488,41 @@ function DailyEntryInner() {
       {/* Farmers needing entry */}
       {activeFarmers.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-gray-700">
-              ⏳ Pending ({activeFarmers.length})
-            </h2>
-          </div>
           {activeFarmers.map((f) => (
-            <FarmerEntryRow
+            <div
               key={f._id}
-              farmer={f}
-              milkType={milkType}
-              dateBS={dateBS}
-              slabs={slabs}
-              sessions={sessions}
-              savingKeys={savingKeys}
-              onFieldChange={handleFieldChange}
-              onSave={saveSession}
-              onDelete={deleteSession}
-              preselected={preselectedFarmer === f._id}
-            />
+              className={`card ${preselectedFarmer === f._id ? "border-blue-500 bg-blue-50" : ""}`}
+            >
+              <div className="mb-3">
+                <p className="font-bold text-base">{f.name}</p>
+                <p className="text-xs text-gray-600">
+                  {f.code}
+                  {f.phone ? ` | ${f.phone}` : ""}
+                </p>
+              </div>
+              <div className="space-y-3">
+                <MilkTypeBlock
+                  farmerId={f._id}
+                  milkType="cow"
+                  sessions={sessions}
+                  slabs={cowSlabs}
+                  savingKeys={savingKeys}
+                  onFieldChange={handleFieldChange}
+                  onSave={saveSession}
+                  onDelete={deleteSession}
+                />
+                <MilkTypeBlock
+                  farmerId={f._id}
+                  milkType="buffalo"
+                  sessions={sessions}
+                  slabs={buffaloSlabs}
+                  savingKeys={savingKeys}
+                  onFieldChange={handleFieldChange}
+                  onSave={saveSession}
+                  onDelete={deleteSession}
+                />
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -605,16 +543,18 @@ function DailyEntryInner() {
                   <p className="font-bold text-sm">{f.name}</p>
                   <p className="text-xs text-gray-600">{f.code}</p>
                 </div>
-                <div className="text-right text-xs">
-                  {sessions[`${f._id}_morning`] && (
-                    <p>
-                      ☀️ {sessions[`${f._id}_morning`].qty}L
-                    </p>
+                <div className="text-right text-xs space-y-0.5">
+                  {sessions[`${f._id}_cow_morning`]?.saved && (
+                    <p>🐄 ☀️ {sessions[`${f._id}_cow_morning`].qty}L</p>
                   )}
-                  {sessions[`${f._id}_evening`] && (
-                    <p>
-                      🌙 {sessions[`${f._id}_evening`].qty}L
-                    </p>
+                  {sessions[`${f._id}_cow_evening`]?.saved && (
+                    <p>🐄 🌙 {sessions[`${f._id}_cow_evening`].qty}L</p>
+                  )}
+                  {sessions[`${f._id}_buffalo_morning`]?.saved && (
+                    <p>🐃 ☀️ {sessions[`${f._id}_buffalo_morning`].qty}L</p>
+                  )}
+                  {sessions[`${f._id}_buffalo_evening`]?.saved && (
+                    <p>🐃 🌙 {sessions[`${f._id}_buffalo_evening`].qty}L</p>
                   )}
                 </div>
               </div>
@@ -628,9 +568,7 @@ function DailyEntryInner() {
         <div className="card text-center py-8">
           <p className="text-4xl mb-3">👨‍🌾</p>
           <h2 className="text-xl font-bold mb-2">No farmers added yet</h2>
-          <p className="text-gray-600 mb-4">
-            Add farmers first before you can record milk collection.
-          </p>
+          <p className="text-gray-600 mb-4">Add farmers first before you can record milk collection.</p>
           <a
             href="/farmers/new"
             className="inline-block px-6 py-3 min-h-touch bg-blue-600 text-white rounded-xl font-bold text-base shadow-[3px_3px_0_rgba(0,0,0,0.2)] active:shadow-none active:translate-x-[3px] active:translate-y-[3px] transition-all"
@@ -643,12 +581,8 @@ function DailyEntryInner() {
       {farmers.length > 0 && activeFarmers.length === 0 && completedFarmers.length > 0 && (
         <div className="card text-center py-6 border-green-500 bg-green-50">
           <p className="text-3xl mb-2">🎉</p>
-          <h2 className="text-lg font-bold text-green-800">
-            All farmers done for the day!
-          </h2>
-          <p className="text-sm text-gray-600">
-            {totalLiters.toFixed(1)}L collected (Rs. {totalAmount.toFixed(2)})
-          </p>
+          <h2 className="text-lg font-bold text-green-800">All farmers done for the day!</h2>
+          <p className="text-sm text-gray-600">{totalLiters.toFixed(1)}L collected (Rs. {totalAmount.toFixed(2)})</p>
         </div>
       )}
     </div>

@@ -1,5 +1,10 @@
 import NepaliDate from "nepali-date-converter";
 
+const adMonthNames = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
 export function bsToAd(bsDate: string): string {
   const parts = bsDate.split("-");
   const year = parseInt(parts[0], 10);
@@ -42,4 +47,21 @@ export function formatAdDate(adDate: string): string {
   const month = parseInt(parts[1], 10);
   const day = parseInt(parts[2], 10);
   return `${year}/${month}/${day}`;
+}
+
+export function formatBsDateNepali(bsDate: string): string {
+  const parts = bsDate.split("-");
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
+  const day = parseInt(parts[2], 10);
+  const nd = new NepaliDate(year, month - 1, day);
+  return nd.format("YYYY MMMM DD, ddd", "np");
+}
+
+export function formatAdDateDisplay(adDate: string): string {
+  const parts = adDate.split("-");
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
+  const day = parseInt(parts[2], 10);
+  return `${day} ${adMonthNames[month - 1]} ${year}`;
 }

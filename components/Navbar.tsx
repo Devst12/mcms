@@ -2,21 +2,31 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Users, FileText, ClipboardList, Scale, MoreHorizontal } from "lucide-react";
+import { Home, Plus, ClipboardList, Users, MoreHorizontal } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getUnsyncedItems } from "@/lib/indexed-db";
 
 const primaryNav = [
-  { href: "/", label: "Home", icon: Home },
-  { href: "/entry", label: "Collect", icon: FileText },
-  { href: "/entries", label: "History", icon: ClipboardList },
-  { href: "/farmers", label: "Farmers", icon: Users },
+  { href: "/", label: "घर", icon: Home },
+  { href: "/entry", label: "दूध थप्नुहोस्", icon: Plus },
+  { href: "/entries", label: "विवरण", icon: ClipboardList },
+  { href: "/farmers", label: "किसान", icon: Users },
+];
+
+const moreNav = [
+  { href: "/reconcile", label: "मिलान" },
+  { href: "/company", label: "कम्पनी" },
+  { href: "/rates", label: "दर" },
+  { href: "/advances", label: "अग्रिम" },
+  { href: "/reports/monthly", label: "प्रतिवेदन" },
+  { href: "/reports/payments", label: "भुक्तानी" },
+  { href: "/slip", label: "स्लिप" },
 ];
 
 export default function Navbar() {
   const pathname = usePathname();
   const [pendingSync, setPendingSync] = useState(0);
-  const [showMenu, setShowMenu] = useState(false);
+  const [showMore, setShowMore] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,41 +90,29 @@ export default function Navbar() {
 
   return (
     <>
-      {/* ===== Overlay for more menu ===== */}
-      {showMenu && (
+      {showMore && (
         <div
           className="fixed inset-0 z-40 bg-black/40"
-          onClick={() => setShowMenu(false)}
+          onClick={() => setShowMore(false)}
         />
       )}
 
-      {/* ===== More Menu (slide-up) ===== */}
-      {showMenu && (
+      {showMore && (
         <div className="fixed bottom-[calc(64px+var(--safe-area-bottom))] left-0 right-0 z-50 bg-white border-t-2 border-gray-800 rounded-t-2xl shadow-[0_-4px_0_rgba(0,0,0,0.15)] px-2 pb-4 pt-2 animate-slide-up">
           <div className="w-10 h-1.5 bg-gray-300 rounded-full mx-auto mb-3" />
           <div className="grid grid-cols-4 gap-1">
-            {[
-              { href: "/reconcile", label: "Reconcile", icon: Scale },
-              { href: "/company", label: "Company", icon: Home },
-              { href: "/rates", label: "Rates", icon: Home },
-              { href: "/advances", label: "Advances", icon: Home },
-              { href: "/reports/monthly", label: "Reports", icon: Home },
-              { href: "/reports/payments", label: "Payments", icon: Home },
-              { href: "/slip", label: "Slip", icon: Home },
-            ].map((item) => {
-              const Icon = item.icon;
+            {moreNav.map((item) => {
               const active = pathname === item.href || pathname.startsWith(item.href + "/");
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  onClick={() => setShowMenu(false)}
+                  onClick={() => setShowMore(false)}
                   className={`flex flex-col items-center justify-center min-h-[48px] rounded-xl text-xs font-bold transition-colors ${
                     active ? "bg-blue-100 text-blue-700 border-2 border-blue-300" : "text-gray-600 hover:bg-gray-100"
                   }`}
                 >
-                  <Icon size={20} />
-                  <span className="mt-0.5">{item.label}</span>
+                  {item.label}
                 </Link>
               );
             })}
@@ -122,7 +120,6 @@ export default function Navbar() {
         </div>
       )}
 
-      {/* ===== Bottom Navigation Bar ===== */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t-2 border-gray-800 shadow-[0_-4px_0_rgba(0,0,0,0.15)]"
         style={{ paddingBottom: "var(--safe-area-bottom)" }}
@@ -130,58 +127,39 @@ export default function Navbar() {
         <div className="flex items-center justify-around max-w-screen-xl mx-auto px-2 h-16">
           {primaryNav.map((item) => {
             const Icon = item.icon;
+            const isAddTab = item.href === "/entry";
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex flex-col items-center justify-center min-w-[60px] min-h-[44px] px-3 py-1 rounded-xl text-xs font-bold transition-colors ${
-                  active
-                    ? "text-blue-700 bg-blue-50 border-2 border-blue-300"
-                    : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+                className={`flex flex-col items-center justify-center min-w-[60px] min-h-[56px] px-3 py-1 rounded-xl text-xs font-bold transition-colors ${
+                  isAddTab
+                    ? "bg-blue-600 text-white shadow-[2px_2px_0_rgba(0,0,0,0.2)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px]"
+                    : active
+                      ? "text-blue-700 bg-blue-50 border-2 border-blue-300"
+                      : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
                 }`}
               >
-                <Icon size={22} strokeWidth={active ? 2.5 : 1.5} />
+                <Icon size={isAddTab ? 26 : 22} strokeWidth={active || isAddTab ? 2.5 : 1.5} />
                 <span className="mt-0.5 text-[10px] leading-tight">{item.label}</span>
               </Link>
             );
           })}
 
-          {/* Sync button */}
           <button
-            onClick={handleSync}
+            onClick={() => setShowMore(!showMore)}
             className={`flex flex-col items-center justify-center min-w-[60px] min-h-[44px] px-3 py-1 rounded-xl text-xs font-bold transition-colors relative ${
-              pendingSync > 0
-                ? "text-orange-600 bg-orange-50 border-2 border-orange-300"
-                : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+              showMore ? "text-blue-700 bg-blue-50 border-2 border-blue-300" : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
             }`}
-            title="Sync Now"
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={pendingSync > 0 ? 2.5 : 1.5} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 2v6h-6" />
-              <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-              <path d="M3 22v-6h6" />
-              <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-            </svg>
-            <span className="mt-0.5 text-[10px] leading-tight">Sync</span>
+            <MoreHorizontal size={22} strokeWidth={showMore ? 2.5 : 1.5} />
+            <span className="mt-0.5 text-[10px] leading-tight">थप विकल्प</span>
             {pendingSync > 0 && (
               <span className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
                 {pendingSync > 9 ? "9+" : pendingSync}
               </span>
             )}
-          </button>
-
-          {/* More button */}
-          <button
-            onClick={() => setShowMenu(!showMenu)}
-            className={`flex flex-col items-center justify-center min-w-[60px] min-h-[44px] px-3 py-1 rounded-xl text-xs font-bold transition-colors ${
-              showMenu
-                ? "text-blue-700 bg-blue-50 border-2 border-blue-300"
-                : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
-            }`}
-          >
-            <MoreHorizontal size={22} strokeWidth={showMenu ? 2.5 : 1.5} />
-            <span className="mt-0.5 text-[10px] leading-tight">More</span>
           </button>
         </div>
       </nav>

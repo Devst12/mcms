@@ -42,7 +42,7 @@ html {
 body {
   background: var(--color-surface-muted);
   color: var(--color-text-primary);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), var(--font-mukta), Arial, Helvetica, sans-serif;
   overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -113,6 +113,25 @@ body {
 .text-3xl-large {
   font-size: 1.875rem;
   line-height: 2.25rem;
+}
+.text-4xl-large {
+  font-size: 2.25rem;
+  line-height: 2.5rem;
+}
+
+/* ===== Slide-up animation ===== */
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-slide-up {
+  animation: slide-up 0.2s ease-out;
 }
 
 /* ===== Slip styling ===== */
