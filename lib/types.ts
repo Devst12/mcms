@@ -22,6 +22,7 @@ export interface Entry {
   dateBS: string;
   farmerId: string;
   milkType: "cow" | "buffalo";
+  session?: "morning" | "evening" | "both";
   morningQty: number;
   eveningQty: number;
   fatPercent: number;

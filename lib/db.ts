@@ -48,7 +48,7 @@ export async function deleteFarmer(id: string): Promise<boolean> {
   return result.deletedCount > 0;
 }
 
-export async function getEntries(dateFrom?: string, dateTo?: string, farmerId?: string, milkType?: string): Promise<Entry[]> {
+export async function getEntries(dateFrom?: string, dateTo?: string, farmerId?: string, milkType?: string, session?: string): Promise<Entry[]> {
   const db = await getDb();
   const query: Record<string, unknown> = {};
   if (dateFrom || dateTo) {
@@ -58,6 +58,7 @@ export async function getEntries(dateFrom?: string, dateTo?: string, farmerId?: 
   }
   if (farmerId) query.farmerId = farmerId;
   if (milkType) query.milkType = milkType;
+  if (session) query.session = session;
   return db.collection<Entry>("entries").find(query).sort({ dateAD: -1 }).toArray();
 }
 

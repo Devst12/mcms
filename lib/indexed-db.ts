@@ -49,7 +49,8 @@ export async function saveAdvanceLocal(advance: Record<string, unknown>): Promis
 
 export async function queueForSync(item: Record<string, unknown>): Promise<void> {
   const db = await getDb();
-  await db.put("sync_queue", item);
+  const payload = { ...item, timestamp: item.timestamp ?? Date.now() };
+  await db.put("sync_queue", payload);
 }
 
 export async function getUnsyncedItems(storeName: string): Promise<Record<string, unknown>[]> {

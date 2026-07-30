@@ -23,10 +23,12 @@ export async function POST(request: NextRequest) {
     const db = await getDb();
     const { createEntry, getActiveRateSlab } = await import("@/lib/db");
 
+    const session = body.session || "both";
     const existing = await db.collection("entries").findOne({
       dateAD: body.dateAD,
       farmerId: body.farmerId,
       milkType: body.milkType,
+      session,
     });
 
     if (existing) {
@@ -40,7 +42,7 @@ export async function POST(request: NextRequest) {
       }
       const updated = await db.collection("entries").updateOne(
         { _id: existing._id },
-        { $set: { morningQty: body.morningQty, eveningQty: body.eveningQty, fatPercent: body.fatPercent, rateUsed } }
+        { $set: { morningQty: body.morningQty, eveningQty: body.eveningQty, fatPercent: body.fatPercent, rateUsed, session } }
       );
       if (updated.modifiedCount > 0) {
         const fresh = await db.collection("entries").findOne({ _id: existing._id });

@@ -28,7 +28,10 @@ export default function RootLayout({
       lang="ne"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col pb-16">
+      <body
+        className="min-h-full flex flex-col pb-[calc(64px+var(--safe-area-bottom))]"
+        style={{ paddingBottom: "calc(64px + var(--safe-area-bottom))" }}
+      >
         <main className="flex-1 overflow-auto">{children}</main>
         <Navbar />
       </body>
