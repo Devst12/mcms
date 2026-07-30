@@ -66,71 +66,189 @@ export default function RatesPage() {
   };
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-4 pb-8">
       <h1 className="text-2xl font-bold">Rates ⚙️</h1>
 
-      <div className="p-4 bg-white rounded-xl border">
-        <h2 className="font-semibold mb-2">Current Rate Slabs (Cow 🐄)</h2>
-        {cowRateSlabs.length === 0 && <p className="text-gray-500">No rate slabs defined</p>}
+      {/* Cow Rate Slabs */}
+      <div className="card">
+        <h2 className="text-lg font-bold mb-3">🐄 Cow Rate Slabs</h2>
+        {cowRateSlabs.length === 0 && (
+          <p className="text-gray-500 text-sm mb-3">No rate slabs defined yet.</p>
+        )}
         {cowRateSlabs.map((slab) => (
-          <div key={slab._id} className="mb-4 p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600">Effective from: {slab.effectiveFromAD}</p>
-            <div className="mt-2 space-y-1">
+          <div key={slab._id} className="bg-cow border-2 border-gray-300 rounded-xl p-3 mb-3">
+            <p className="text-xs font-bold text-gray-600 mb-2">
+              Effective: {slab.effectiveFromAD}
+            </p>
+            <div className="space-y-1">
               {slab.slabs.map((s, i) => (
-                <p key={i} className="text-base">{s.minFat}% - {s.maxFat}%: Rs. {s.rate}/L</p>
+                <div key={i} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-gray-200">
+                  <span className="text-sm font-bold">{s.minFat}% – {s.maxFat}%</span>
+                  <span className="text-sm font-bold text-green-700 tabular-nums">Rs. {s.rate}/L</span>
+                </div>
               ))}
             </div>
           </div>
         ))}
-        <form onSubmit={(e) => handleSubmit(e, "cow")} className="mt-4 p-3 bg-cow rounded-lg border">
-          <h3 className="font-semibold mb-2">Add Cow Rate Slab</h3>
-          <div className="flex flex-wrap gap-2 mb-2">
-            <input type="date" value={effectiveFromAD} onChange={(e) => setEffectiveFromAD(e.target.value)} required className="px-3 py-2 border rounded-lg min-h-touch" />
-          </div>
-          <div className="space-y-2 mb-2">
-            {cowSlabs.map((s, i) => (
-              <div key={i} className="flex gap-2">
-                <input type="number" step="0.1" value={s.minFat} onChange={(e) => updateSlab("cow", i, "minFat", e.target.value)} placeholder="Min Fat%" required className="w-24 px-2 py-2 border rounded-lg min-h-touch" />
-                <input type="number" step="0.1" value={s.maxFat} onChange={(e) => updateSlab("cow", i, "maxFat", e.target.value)} placeholder="Max Fat%" required className="w-24 px-2 py-2 border rounded-lg min-h-touch" />
-                <input type="number" step="0.1" value={s.rate} onChange={(e) => updateSlab("cow", i, "rate", e.target.value)} placeholder="Rate" required className="w-24 px-2 py-2 border rounded-lg min-h-touch" />
-              </div>
-            ))}
-          </div>
-          <button type="button" onClick={() => addSlabRow("cow")} className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm mr-2">+ Add Row</button>
-          <button type="submit" className="px-4 py-2 min-h-touch bg-green-600 text-white rounded-lg font-medium">Save Cow Slab</button>
-        </form>
+
+        {/* Add new cow slab form */}
+        <details className="mt-3">
+          <summary className="text-sm font-bold text-blue-600 cursor-pointer">+ Add Cow Rate Slab</summary>
+          <form onSubmit={(e) => handleSubmit(e, "cow")} className="mt-3 space-y-3">
+            <div>
+              <label className="text-xs font-bold text-gray-600">Effective Date (AD)</label>
+              <input
+                type="date"
+                value={effectiveFromAD}
+                onChange={(e) => setEffectiveFromAD(e.target.value)}
+                required
+                className="w-full px-4 py-3 border-2 border-gray-800 rounded-xl text-base font-bold bg-white"
+              />
+            </div>
+            <div className="space-y-2">
+              {cowSlabs.map((s, i) => (
+                <div key={i} className="grid grid-cols-3 gap-2">
+                  <input
+                    type="number"
+                    step="0.1"
+                    inputMode="decimal"
+                    value={s.minFat}
+                    onChange={(e) => updateSlab("cow", i, "minFat", e.target.value)}
+                    placeholder="Min Fat %"
+                    required
+                    className="px-3 py-3 border-2 border-gray-800 rounded-xl text-sm font-bold text-center"
+                  />
+                  <input
+                    type="number"
+                    step="0.1"
+                    inputMode="decimal"
+                    value={s.maxFat}
+                    onChange={(e) => updateSlab("cow", i, "maxFat", e.target.value)}
+                    placeholder="Max Fat %"
+                    required
+                    className="px-3 py-3 border-2 border-gray-800 rounded-xl text-sm font-bold text-center"
+                  />
+                  <input
+                    type="number"
+                    step="0.1"
+                    inputMode="decimal"
+                    value={s.rate}
+                    onChange={(e) => updateSlab("cow", i, "rate", e.target.value)}
+                    placeholder="Rate Rs."
+                    required
+                    className="px-3 py-3 border-2 border-gray-800 rounded-xl text-sm font-bold text-center"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => addSlabRow("cow")}
+                className="px-4 py-3 min-h-touch bg-gray-200 text-gray-700 rounded-xl font-bold text-sm border-2 border-gray-400"
+              >
+                + Add Row
+              </button>
+              <button
+                type="submit"
+                className="flex-1 px-4 py-3 min-h-touch bg-green-600 text-white rounded-xl font-bold text-sm shadow-[2px_2px_0_rgba(0,0,0,0.2)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] transition-all"
+              >
+                Save Cow Slab
+              </button>
+            </div>
+          </form>
+        </details>
       </div>
 
-      <div className="p-4 bg-white rounded-xl border">
-        <h2 className="font-semibold mb-2">Current Rate Slabs (Buffalo 🐃)</h2>
-        {buffaloRateSlabs.length === 0 && <p className="text-gray-500">No rate slabs defined</p>}
+      {/* Buffalo Rate Slabs */}
+      <div className="card">
+        <h2 className="text-lg font-bold mb-3">🐃 Buffalo Rate Slabs</h2>
+        {buffaloRateSlabs.length === 0 && (
+          <p className="text-gray-500 text-sm mb-3">No rate slabs defined yet.</p>
+        )}
         {buffaloRateSlabs.map((slab) => (
-          <div key={slab._id} className="mb-4 p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600">Effective from: {slab.effectiveFromAD}</p>
-            <div className="mt-2 space-y-1">
+          <div key={slab._id} className="bg-buffalo border-2 border-gray-600 rounded-xl p-3 mb-3">
+            <p className="text-xs font-bold text-gray-700 mb-2">
+              Effective: {slab.effectiveFromAD}
+            </p>
+            <div className="space-y-1">
               {slab.slabs.map((s, i) => (
-                <p key={i} className="text-base">{s.minFat}% - {s.maxFat}%: Rs. {s.rate}/L</p>
+                <div key={i} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-gray-300">
+                  <span className="text-sm font-bold">{s.minFat}% – {s.maxFat}%</span>
+                  <span className="text-sm font-bold text-green-700 tabular-nums">Rs. {s.rate}/L</span>
+                </div>
               ))}
             </div>
           </div>
         ))}
-        <form onSubmit={(e) => handleSubmit(e, "buffalo")} className="mt-4 p-3 bg-buffalo rounded-lg border">
-          <h3 className="font-semibold mb-2">Add Buffalo Rate Slab</h3>
-          <div className="flex flex-wrap gap-2 mb-2">
-            <input type="date" value={effectiveFromAD} onChange={(e) => setEffectiveFromAD(e.target.value)} required className="px-3 py-2 border rounded-lg min-h-touch" />
-          </div>
-          <div className="space-y-2 mb-2">
-            {buffaloSlabs.map((s, i) => (
-              <div key={i} className="flex gap-2">
-                <input type="number" step="0.1" value={s.minFat} onChange={(e) => updateSlab("buffalo", i, "minFat", e.target.value)} placeholder="Min Fat%" required className="w-24 px-2 py-2 border rounded-lg min-h-touch" />
-                <input type="number" step="0.1" value={s.maxFat} onChange={(e) => updateSlab("buffalo", i, "maxFat", e.target.value)} placeholder="Max Fat%" required className="w-24 px-2 py-2 border rounded-lg min-h-touch" />
-                <input type="number" step="0.1" value={s.rate} onChange={(e) => updateSlab("buffalo", i, "rate", e.target.value)} placeholder="Rate" required className="w-24 px-2 py-2 border rounded-lg min-h-touch" />
-              </div>
-            ))}
-          </div>
-          <button type="button" onClick={() => addSlabRow("buffalo")} className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm mr-2">+ Add Row</button>
-          <button type="submit" className="px-4 py-2 min-h-touch bg-green-600 text-white rounded-lg font-medium">Save Buffalo Slab</button>
-        </form>
+
+        {/* Add new buffalo slab form */}
+        <details className="mt-3">
+          <summary className="text-sm font-bold text-blue-600 cursor-pointer">+ Add Buffalo Rate Slab</summary>
+          <form onSubmit={(e) => handleSubmit(e, "buffalo")} className="mt-3 space-y-3">
+            <div>
+              <label className="text-xs font-bold text-gray-600">Effective Date (AD)</label>
+              <input
+                type="date"
+                value={effectiveFromAD}
+                onChange={(e) => setEffectiveFromAD(e.target.value)}
+                required
+                className="w-full px-4 py-3 border-2 border-gray-800 rounded-xl text-base font-bold bg-white"
+              />
+            </div>
+            <div className="space-y-2">
+              {buffaloSlabs.map((s, i) => (
+                <div key={i} className="grid grid-cols-3 gap-2">
+                  <input
+                    type="number"
+                    step="0.1"
+                    inputMode="decimal"
+                    value={s.minFat}
+                    onChange={(e) => updateSlab("buffalo", i, "minFat", e.target.value)}
+                    placeholder="Min Fat %"
+                    required
+                    className="px-3 py-3 border-2 border-gray-800 rounded-xl text-sm font-bold text-center"
+                  />
+                  <input
+                    type="number"
+                    step="0.1"
+                    inputMode="decimal"
+                    value={s.maxFat}
+                    onChange={(e) => updateSlab("buffalo", i, "maxFat", e.target.value)}
+                    placeholder="Max Fat %"
+                    required
+                    className="px-3 py-3 border-2 border-gray-800 rounded-xl text-sm font-bold text-center"
+                  />
+                  <input
+                    type="number"
+                    step="0.1"
+                    inputMode="decimal"
+                    value={s.rate}
+                    onChange={(e) => updateSlab("buffalo", i, "rate", e.target.value)}
+                    placeholder="Rate Rs."
+                    required
+                    className="px-3 py-3 border-2 border-gray-800 rounded-xl text-sm font-bold text-center"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => addSlabRow("buffalo")}
+                className="px-4 py-3 min-h-touch bg-gray-200 text-gray-700 rounded-xl font-bold text-sm border-2 border-gray-400"
+              >
+                + Add Row
+              </button>
+              <button
+                type="submit"
+                className="flex-1 px-4 py-3 min-h-touch bg-green-600 text-white rounded-xl font-bold text-sm shadow-[2px_2px_0_rgba(0,0,0,0.2)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] transition-all"
+              >
+                Save Buffalo Slab
+              </button>
+            </div>
+          </form>
+        </details>
       </div>
     </div>
   );
