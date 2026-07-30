@@ -9,78 +9,135 @@ export default function CompanyEntry() {
   const [cowQty, setCowQty] = useState("");
   const [buffaloQty, setBuffaloQty] = useState("");
   const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2000);
+  };
 
   const handleSave = async (milkType: "cow" | "buffalo") => {
     const qty = parseFloat(milkType === "cow" ? cowQty : buffaloQty);
-    if (isNaN(qty)) return;
-    const dateAd = await (await import("@/lib/nepali-dates")).bsToAd(dateBS);
-    const cc = {
-      id: `${dateBS}_${milkType}`,
-      dateAD: dateAd,
-      dateBS,
-      milkType,
-      reportedQty: qty,
-      notes: note,
-      synced: false,
-      createdAt: new Date().toISOString(),
-    };
-    await saveCompanyCollectionLocal(cc);
-    await queueForSync({ id: cc.id, collection: "company_collections", data: cc, timestamp: Date.now() });
-    alert("Saved locally");
+    if (isNaN(qty) || qty <= 0) {
+      showToast("Please enter a valid quantity");
+      return;
+    }
+    setSaving(true);
+    try {
+      const dateAd = await (await import("@/lib/nepali-dates")).bsToAd(dateBS);
+      const cc = {
+        id: `${dateBS}_${milkType}`,
+        dateAD: dateAd,
+        dateBS,
+        milkType,
+        reportedQty: qty,
+        notes: note,
+        synced: false,
+        createdAt: new Date().toISOString(),
+      };
+      await saveCompanyCollectionLocal(cc);
+      await queueForSync({ id: cc.id, collection: "company_collections", data: cc, timestamp: Date.now() });
+      showToast(`Saved: ${qty}L ${milkType} ✓`);
+      if (milkType === "cow") setCowQty("");
+      else setBuffaloQty("");
+    } catch {
+      showToast("Failed to save");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-4 pb-8">
       <h1 className="text-2xl font-bold">Company Entry 🏢</h1>
-      <input
-        type="text"
-        value={dateBS}
-        onChange={(e) => setDateBS(e.target.value)}
-        className="px-4 py-3 min-h-touch border rounded-lg text-base w-40"
-      />
-      <div className="space-y-4">
-        <div className="p-4 bg-cow rounded-xl border-2 border-gray-300">
-          <h2 className="font-semibold text-lg mb-2">Cow 🐄</h2>
-          <input
-            type="number"
-            step="0.1"
-            value={cowQty}
-            onChange={(e) => setCowQty(e.target.value)}
-            placeholder="Quantity in Liters"
-            className="w-full px-4 py-3 min-h-touch border rounded-lg text-base mb-2"
-          />
+
+      <div className="card">
+        <p className="text-sm font-bold text-gray-600 mb-2">Date (BS)</p>
+        <input
+          type="text"
+          value={dateBS}
+          onChange={(e) => setDateBS(e.target.value)}
+          className="w-full px-4 py-3 border-2 border-gray-800 rounded-xl text-base font-bold bg-white text-center"
+          placeholder="YYYY-MM-DD"
+        />
+      </div>
+
+      <div className="card bg-cow border-gray-800">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-lg">🐄</span>
+          <h2 className="text-lg font-bold">Cow Milk</h2>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-bold text-gray-600">Quantity (Liters)</label>
+            <input
+              type="number"
+              step="0.1"
+              inputMode="decimal"
+              value={cowQty}
+              onChange={(e) => setCowQty(e.target.value)}
+              placeholder="0.0"
+              className="w-full px-4 py-3 border-2 border-gray-800 rounded-xl text-lg font-bold bg-white text-center tabular-nums"
+            />
+          </div>
           <button
             onClick={() => handleSave("cow")}
-            className="w-full px-4 py-3 min-h-touch bg-gray-800 text-white rounded-lg font-medium"
+            disabled={saving}
+            className="w-full px-5 py-3 min-h-touch bg-gray-800 text-white rounded-xl font-bold text-base shadow-[3px_3px_0_rgba(0,0,0,0.2)] active:shadow-none active:translate-x-[3px] active:translate-y-[3px] transition-all disabled:opacity-50"
           >
-            Save Cow
+            {saving ? "Saving..." : "Save Cow"}
           </button>
         </div>
-        <div className="p-4 bg-buffalo rounded-xl border-2 border-gray-600">
-          <h2 className="font-semibold text-lg mb-2">Buffalo 🐃</h2>
-          <input
-            type="number"
-            step="0.1"
-            value={buffaloQty}
-            onChange={(e) => setBuffaloQty(e.target.value)}
-            placeholder="Quantity in Liters"
-            className="w-full px-4 py-3 min-h-touch border rounded-lg text-base mb-2"
-          />
+      </div>
+
+      <div className="card bg-buffalo border-gray-800">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-lg">🐃</span>
+          <h2 className="text-lg font-bold">Buffalo Milk</h2>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-bold text-gray-600">Quantity (Liters)</label>
+            <input
+              type="number"
+              step="0.1"
+              inputMode="decimal"
+              value={buffaloQty}
+              onChange={(e) => setBuffaloQty(e.target.value)}
+              placeholder="0.0"
+              className="w-full px-4 py-3 border-2 border-gray-800 rounded-xl text-lg font-bold bg-white text-center tabular-nums"
+            />
+          </div>
           <button
             onClick={() => handleSave("buffalo")}
-            className="w-full px-4 py-3 min-h-touch bg-gray-800 text-white rounded-lg font-medium"
+            disabled={saving}
+            className="w-full px-5 py-3 min-h-touch bg-gray-800 text-white rounded-xl font-bold text-base shadow-[3px_3px_0_rgba(0,0,0,0.2)] active:shadow-none active:translate-x-[3px] active:translate-y-[3px] transition-all disabled:opacity-50"
           >
-            Save Buffalo
+            {saving ? "Saving..." : "Save Buffalo"}
           </button>
         </div>
+      </div>
+
+      <div className="card">
+        <label className="text-xs font-bold text-gray-600 mb-1 block">Notes (optional)</label>
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Notes"
+          placeholder="Any notes about today's collection..."
           rows={3}
-          className="w-full px-4 py-3 border rounded-lg text-base"
+          className="w-full px-4 py-3 border-2 border-gray-800 rounded-xl text-base bg-white"
         />
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-24 left-4 right-4 z-50">
+          <div className="bg-gray-900 text-white text-center py-3 px-4 rounded-xl font-bold text-sm shadow-lg max-w-sm mx-auto">
+            {toast}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
