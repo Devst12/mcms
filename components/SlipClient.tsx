@@ -114,7 +114,7 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
         format: [80, (canvas.height / canvas.width) * 80],
       });
       pdf.addImage(imgData, "PNG", 0, 0, 80, (canvas.height / canvas.width) * 80);
-      pdf.save(`slip_${selectedFarmer?.code || "farmer"}_${new Date().toISOString().slice(0, 10)}.pdf`);
+      pdf.save(`slip_${selected?.code || "farmer"}_${new Date().toISOString().slice(0, 10)}.pdf`);
       showToast("PDF downloaded ✓");
     } catch {
       showToast("PDF download failed - try Print instead");
@@ -133,7 +133,7 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
         width: 360,
       });
       const link = document.createElement("a");
-      link.download = `slip_${selectedFarmer?.code || "farmer"}_${new Date().toISOString().slice(0, 10)}.jpg`;
+      link.download = `slip_${selected?.code || "farmer"}_${new Date().toISOString().slice(0, 10)}.jpg`;
       link.href = canvas.toDataURL("image/jpeg", 0.95);
       link.click();
       showToast("JPG downloaded ✓");
