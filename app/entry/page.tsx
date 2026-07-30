@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { getTodayBs } from "@/lib/nepali-dates";
 import { saveEntryLocal, queueForSync } from "@/lib/indexed-db";
 

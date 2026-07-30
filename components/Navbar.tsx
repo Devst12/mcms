@@ -116,6 +116,18 @@ export default function Navbar() {
                 </Link>
               );
             })}
+            <button
+              onClick={() => { handleSync(); setShowMore(false); }}
+              className="flex flex-col items-center justify-center min-h-[48px] rounded-xl text-xs font-bold transition-colors text-gray-600 hover:bg-gray-100"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={pendingSync > 0 ? 2.5 : 1.5} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 2v6h-6" />
+                <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                <path d="M3 22v-6h6" />
+                <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+              </svg>
+              <span className="mt-0.5">पठाउन बाँकी</span>
+            </button>
           </div>
         </div>
       )}

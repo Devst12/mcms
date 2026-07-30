@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import PeriodPicker, { type Period } from "@/components/PeriodPicker";
 import Modal from "@/components/Modal";
@@ -36,36 +36,52 @@ function EntriesInner() {
     setTimeout(() => setToast(null), 2500);
   };
 
-  const loadEntries = useCallback(async () => {
-    setLoading(true);
-    const now = new Date();
-    let from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-    let to = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-31`;
+  const entriesWithNames = useMemo(() => {
+    if (farmers.length === 0) return entries;
+    const farmerMap = new Map(farmers.map((f) => [f._id, f.name]));
+    return entries.map((e) => ({
+      ...e,
+      farmerName: farmerMap.get(e.farmerId) || e.farmerId,
+    }));
+  }, [entries, farmers]);
 
-    if (period.type === "twoMonths") {
-      const fromMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
-      const fromYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-      from = `${fromYear}-${String(fromMonth + 1).padStart(2, "0")}-01`;
-      to = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-31`;
-    } else if (period.type === "thisYear") {
-      from = `${now.getFullYear()}-01-01`;
-      to = `${now.getFullYear()}-12-31`;
-    } else if (period.type === "allTime") {
-      from = "2000-01-01";
-      to = "2099-12-31";
-    } else if (period.type === "custom" && period.from && period.to) {
-      from = period.from;
-      to = period.to;
+  useEffect(() => {
+    let cancelled = false;
+    async function doLoad() {
+      setLoading(true);
+      const now = new Date();
+      let from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+      let to = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-31`;
+
+      if (period.type === "twoMonths") {
+        const fromMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
+        const fromYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+        from = `${fromYear}-${String(fromMonth + 1).padStart(2, "0")}-01`;
+        to = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-31`;
+      } else if (period.type === "thisYear") {
+        from = `${now.getFullYear()}-01-01`;
+        to = `${now.getFullYear()}-12-31`;
+      } else if (period.type === "allTime") {
+        from = "2000-01-01";
+        to = "2099-12-31";
+      } else if (period.type === "custom" && period.from && period.to) {
+        from = period.from;
+        to = period.to;
+      }
+
+      const params = new URLSearchParams();
+      if (selectedFarmer) params.set("farmerId", selectedFarmer);
+      params.set("dateFrom", from);
+      params.set("dateTo", to);
+      const res = await fetch(`/api/entries?${params}`);
+      const data = (await res.json()) as EntryData[];
+      if (!cancelled) {
+        setEntries(data);
+        setLoading(false);
+      }
     }
-
-    const params = new URLSearchParams();
-    if (selectedFarmer) params.set("farmerId", selectedFarmer);
-    params.set("dateFrom", from);
-    params.set("dateTo", to);
-    const res = await fetch(`/api/entries?${params}`);
-    const data = (await res.json()) as EntryData[];
-    setEntries(data);
-    setLoading(false);
+    doLoad();
+    return () => { cancelled = true; };
   }, [selectedFarmer, period]);
 
   useEffect(() => {
@@ -75,24 +91,8 @@ function EntriesInner() {
       .then((data) => {
         if (!cancelled) setFarmers(data);
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
-
-  useEffect(() => {
-    loadEntries();
-  }, [loadEntries]);
-
-  useEffect(() => {
-    if (farmers.length === 0) return;
-    setEntries((prev) =>
-      prev.map((e) => ({
-        ...e,
-        farmerName: farmers.find((f) => f._id === e.farmerId)?.name || e.farmerId,
-      }))
-    );
-  }, [farmers]);
 
   const startEdit = (entry: EntryData) => {
     setEditingId(entry._id);
@@ -238,12 +238,12 @@ function EntriesInner() {
                         <p className="font-bold tabular-nums">{e.eveningQty.toFixed(1)}</p>
                       </div>
                       <div className="bg-white rounded-lg p-2 border">
-                        <p className="text-gray-500">Fat</p>
-                        <p className="font-bold tabular-nums">{e.fatPercent.toFixed(1)}%</p>
+                        <p className="text-gray-500">Morn Fat</p>
+                        <p className="font-bold tabular-nums">{e.session === "morning" ? e.fatPercent.toFixed(1) + "%" : "-"}</p>
                       </div>
                       <div className="bg-white rounded-lg p-2 border">
-                        <p className="text-gray-500">Rate</p>
-                        <p className="font-bold tabular-nums">Rs. {e.rateUsed.toFixed(2)}</p>
+                        <p className="text-gray-500">Eve Fat</p>
+                        <p className="font-bold tabular-nums">{e.session === "evening" ? e.fatPercent.toFixed(1) + "%" : "-"}</p>
                       </div>
                     </div>
                     <div className="flex items-center justify-end gap-2 pt-1">
@@ -326,7 +326,8 @@ function EntriesInner() {
                       <th className="py-2 px-3 text-right font-bold">Morning</th>
                       <th className="py-2 px-3 text-right font-bold">Evening</th>
                       <th className="py-2 px-3 text-right font-bold">Total</th>
-                      <th className="py-2 px-3 text-right font-bold">Fat %</th>
+                      <th className="py-2 px-3 text-right font-bold">Morn Fat</th>
+                      <th className="py-2 px-3 text-right font-bold">Eve Fat</th>
                       <th className="py-2 px-3 text-right font-bold">Rate</th>
                       <th className="py-2 px-3 text-right font-bold">Amount</th>
                       <th className="py-2 px-3 text-right font-bold">Actions</th>
@@ -348,19 +349,18 @@ function EntriesInner() {
                             <td className="py-2 px-3 text-right font-medium tabular-nums">
                               {((parseFloat(editForm.morning) || 0) + (parseFloat(editForm.evening) || 0)).toFixed(1)}
                             </td>
-                            <td className="py-2 px-3 text-right">
-                              <input type="number" step="0.1" value={editForm.fat} onChange={(ev) => setEditForm({ ...editForm, fat: ev.target.value })} className="w-16 px-2 py-1 border rounded text-right" />
-                            </td>
-                            <td className="py-2 px-3 text-right tabular-nums">{e.rateUsed.toFixed(2)}</td>
-                            <td className="py-2 px-3 text-right font-medium tabular-nums">
-                              Rs. {(((parseFloat(editForm.morning) || 0) + (parseFloat(editForm.evening) || 0)) * e.rateUsed).toFixed(2)}
-                            </td>
-                            <td className="py-2 px-3 text-right">
-                              <div className="flex gap-1 justify-end">
-                                <button onClick={() => saveEdit(e)} className="px-2 py-1 bg-green-600 text-white rounded text-xs font-bold">Save</button>
-                                <button onClick={cancelEdit} className="px-2 py-1 bg-gray-600 text-white rounded text-xs font-bold">Cancel</button>
-                              </div>
-                            </td>
+                             <td className="py-2 px-3 text-right tabular-nums">{e.session === "morning" ? e.fatPercent.toFixed(1) + "%" : "-"}</td>
+                             <td className="py-2 px-3 text-right tabular-nums">{e.session === "evening" ? e.fatPercent.toFixed(1) + "%" : "-"}</td>
+                             <td className="py-2 px-3 text-right tabular-nums">{e.rateUsed.toFixed(2)}</td>
+                             <td className="py-2 px-3 text-right font-medium tabular-nums">
+                               Rs. {(((parseFloat(editForm.morning) || 0) + (parseFloat(editForm.evening) || 0)) * e.rateUsed).toFixed(2)}
+                             </td>
+                             <td className="py-2 px-3 text-right">
+                               <div className="flex gap-1 justify-end">
+                                 <button onClick={() => saveEdit(e)} className="px-2 py-1 bg-green-600 text-white rounded text-xs font-bold">Save</button>
+                                 <button onClick={cancelEdit} className="px-2 py-1 bg-gray-600 text-white rounded text-xs font-bold">Cancel</button>
+                               </div>
+                             </td>
                           </>
                         ) : (
                           <>
@@ -369,17 +369,18 @@ function EntriesInner() {
                             <td className="py-2 px-3 text-right tabular-nums">{e.morningQty.toFixed(1)}</td>
                             <td className="py-2 px-3 text-right tabular-nums">{e.eveningQty.toFixed(1)}</td>
                             <td className="py-2 px-3 text-right font-bold tabular-nums">{(e.morningQty + e.eveningQty).toFixed(1)}</td>
-                            <td className="py-2 px-3 text-right tabular-nums">{e.fatPercent.toFixed(1)}</td>
-                            <td className="py-2 px-3 text-right tabular-nums">{e.rateUsed.toFixed(2)}</td>
-                            <td className="py-2 px-3 text-right font-bold tabular-nums">
-                              Rs. {((e.morningQty + e.eveningQty) * e.rateUsed).toFixed(2)}
-                            </td>
-                            <td className="py-2 px-3 text-right">
-                              <div className="flex gap-1 justify-end">
-                                <button onClick={() => startEdit(e)} className="px-2 py-1 bg-blue-600 text-white rounded text-xs font-bold">Edit</button>
-                                <button onClick={() => setDeleteId(e._id)} className="px-2 py-1 bg-red-600 text-white rounded text-xs font-bold">Del</button>
-                              </div>
-                            </td>
+                             <td className="py-2 px-3 text-right tabular-nums">{e.session === "morning" ? e.fatPercent.toFixed(1) + "%" : "-"}</td>
+                             <td className="py-2 px-3 text-right tabular-nums">{e.session === "evening" ? e.fatPercent.toFixed(1) + "%" : "-"}</td>
+                             <td className="py-2 px-3 text-right tabular-nums">{e.rateUsed.toFixed(2)}</td>
+                             <td className="py-2 px-3 text-right font-bold tabular-nums">
+                               Rs. {((e.morningQty + e.eveningQty) * e.rateUsed).toFixed(2)}
+                             </td>
+                             <td className="py-2 px-3 text-right">
+                               <div className="flex gap-1 justify-end">
+                                 <button onClick={() => startEdit(e)} className="px-2 py-1 bg-blue-600 text-white rounded text-xs font-bold">Edit</button>
+                                 <button onClick={() => setDeleteId(e._id)} className="px-2 py-1 bg-red-600 text-white rounded text-xs font-bold">Del</button>
+                               </div>
+                             </td>
                           </>
                         )}
                       </tr>
