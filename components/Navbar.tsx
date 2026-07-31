@@ -2,14 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Plus, ClipboardList, Users, MoreHorizontal } from "lucide-react";
+import { Home, Plus, ClipboardList, Users, MoreHorizontal, RefreshCw } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getUnsyncedItems } from "@/lib/indexed-db";
 
-const primaryNav = [
+// Left/right of the center FAB — "दूध थप्नुहोस्" is promoted to its own
+// floating action button instead of competing as a fifth flat tab.
+const leftNav = [
   { href: "/", label: "घर", icon: Home },
-  { href: "/entry", label: "दूध थप्नुहोस्", icon: Plus },
   { href: "/entries", label: "विवरण", icon: ClipboardList },
+];
+
+const rightNav = [
   { href: "/farmers", label: "किसान", icon: Users },
 ];
 
@@ -23,10 +27,25 @@ const moreNav = [
   { href: "/slip", label: "स्लिप" },
 ];
 
+function NavItem({ href, label, Icon, active }: { href: string; label: string; Icon: typeof Home; active: boolean }) {
+  return (
+    <Link
+      href={href}
+      className={`flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1.5 rounded-xl transition-colors ${
+        active ? "text-gray-900" : "text-gray-400"
+      }`}
+    >
+      <Icon size={21} strokeWidth={active ? 2.4 : 1.8} />
+      <span className={`text-[10px] leading-tight ${active ? "font-bold" : "font-medium"}`}>{label}</span>
+    </Link>
+  );
+}
+
 export default function Navbar() {
   const pathname = usePathname();
   const [pendingSync, setPendingSync] = useState(0);
   const [showMore, setShowMore] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,10 +61,14 @@ export default function Navbar() {
     };
     updatePendingCount();
     const interval = setInterval(updatePendingCount, 30000);
-    return () => { cancelled = true; clearInterval(interval); };
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   const handleSync = async () => {
+    setSyncing(true);
     try {
       const entries = await getUnsyncedItems("entries");
       const companies = await getUnsyncedItems("company_collections");
@@ -85,31 +108,36 @@ export default function Navbar() {
       }
     } catch (err) {
       console.error("Sync failed", err);
+    } finally {
+      setSyncing(false);
     }
   };
+
+  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
   return (
     <>
       {showMore && (
         <div
-          className="fixed inset-0 z-40 bg-black/40"
+          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]"
           onClick={() => setShowMore(false)}
         />
       )}
 
       {showMore && (
-        <div className="fixed bottom-[calc(64px+var(--safe-area-bottom))] left-0 right-0 z-50 bg-white border-t-2 border-gray-800 rounded-t-2xl shadow-[0_-4px_0_rgba(0,0,0,0.15)] px-2 pb-4 pt-2 animate-slide-up">
-          <div className="w-10 h-1.5 bg-gray-300 rounded-full mx-auto mb-3" />
-          <div className="grid grid-cols-4 gap-1">
+        <div className="fixed bottom-[calc(72px+var(--safe-area-bottom))] left-0 right-0 z-50 bg-white rounded-t-3xl shadow-[0_-8px_30px_rgba(0,0,0,0.12)] px-3 pb-5 pt-3 animate-slide-up">
+          <div className="w-9 h-1 bg-gray-200 rounded-full mx-auto mb-4" />
+
+          <div className="grid grid-cols-4 gap-2">
             {moreNav.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(item.href + "/");
+              const active = isActive(item.href);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={() => setShowMore(false)}
-                  className={`flex flex-col items-center justify-center min-h-[48px] rounded-xl text-xs font-bold transition-colors ${
-                    active ? "bg-blue-100 text-blue-700 border-2 border-blue-300" : "text-gray-600 hover:bg-gray-100"
+                  className={`flex flex-col items-center justify-center min-h-[52px] rounded-xl text-[11.5px] font-semibold px-1 text-center transition-colors ${
+                    active ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-600"
                   }`}
                 >
                   {item.label}
@@ -117,58 +145,56 @@ export default function Navbar() {
               );
             })}
             <button
-              onClick={() => { handleSync(); setShowMore(false); }}
-              className="flex flex-col items-center justify-center min-h-[48px] rounded-xl text-xs font-bold transition-colors text-gray-600 hover:bg-gray-100"
+              onClick={() => {
+                handleSync();
+                setShowMore(false);
+              }}
+              className="flex flex-col items-center justify-center gap-1 min-h-[52px] rounded-xl text-[11.5px] font-semibold bg-gray-50 text-gray-600 relative"
             >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={pendingSync > 0 ? 2.5 : 1.5} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 2v6h-6" />
-                <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-                <path d="M3 22v-6h6" />
-                <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-              </svg>
-              <span className="mt-0.5">पठाउन बाँकी</span>
+              <RefreshCw size={18} strokeWidth={pendingSync > 0 ? 2.4 : 1.8} className={syncing ? "animate-spin" : ""} />
+              <span>पठाउन बाँकी</span>
+              {pendingSync > 0 && (
+                <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 bg-orange-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                  {pendingSync > 9 ? "9+" : pendingSync}
+                </span>
+              )}
             </button>
           </div>
         </div>
       )}
 
       <nav
-        className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t-2 border-gray-800 shadow-[0_-4px_0_rgba(0,0,0,0.15)]"
+        className="fixed bottom-0 left-0 right-0 z-30 bg-white shadow-[0_-1px_0_rgba(0,0,0,0.04),0_-8px_24px_rgba(0,0,0,0.05)]"
         style={{ paddingBottom: "var(--safe-area-bottom)" }}
       >
-        <div className="flex items-center justify-around max-w-screen-xl mx-auto px-2 h-16">
-          {primaryNav.map((item) => {
-            const Icon = item.icon;
-            const isAddTab = item.href === "/entry";
-            const active = pathname === item.href || pathname.startsWith(item.href + "/");
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex flex-col items-center justify-center min-w-[60px] min-h-[56px] px-3 py-1 rounded-xl text-xs font-bold transition-colors ${
-                  isAddTab
-                    ? "bg-blue-600 text-white shadow-[2px_2px_0_rgba(0,0,0,0.2)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px]"
-                    : active
-                      ? "text-blue-700 bg-blue-50 border-2 border-blue-300"
-                      : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
-                }`}
-              >
-                <Icon size={isAddTab ? 26 : 22} strokeWidth={active || isAddTab ? 2.5 : 1.5} />
-                <span className="mt-0.5 text-[10px] leading-tight">{item.label}</span>
-              </Link>
-            );
-          })}
+        <div className="relative flex items-center justify-around max-w-screen-xl mx-auto px-2 h-[72px]">
+          {leftNav.map((item) => (
+            <NavItem key={item.href} href={item.href} label={item.label} Icon={item.icon} active={isActive(item.href)} />
+          ))}
+
+          {/* Center FAB — the one primary action, lifted above the bar */}
+          <Link
+            href="/entry"
+            aria-label="दूध थप्नुहोस्"
+            className="relative -top-4 flex items-center justify-center w-14 h-14 rounded-full bg-gray-900 text-white shadow-lg active:scale-95 transition-transform"
+          >
+            <Plus size={26} strokeWidth={2.4} />
+          </Link>
+
+          {rightNav.map((item) => (
+            <NavItem key={item.href} href={item.href} label={item.label} Icon={item.icon} active={isActive(item.href)} />
+          ))}
 
           <button
             onClick={() => setShowMore(!showMore)}
-            className={`flex flex-col items-center justify-center min-w-[60px] min-h-[44px] px-3 py-1 rounded-xl text-xs font-bold transition-colors relative ${
-              showMore ? "text-blue-700 bg-blue-50 border-2 border-blue-300" : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+            className={`relative flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1.5 rounded-xl transition-colors ${
+              showMore ? "text-gray-900" : "text-gray-400"
             }`}
           >
-            <MoreHorizontal size={22} strokeWidth={showMore ? 2.5 : 1.5} />
-            <span className="mt-0.5 text-[10px] leading-tight">थप विकल्प</span>
+            <MoreHorizontal size={21} strokeWidth={showMore ? 2.4 : 1.8} />
+            <span className={`text-[10px] leading-tight ${showMore ? "font-bold" : "font-medium"}`}>थप विकल्प</span>
             {pendingSync > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
+              <span className="absolute top-0 right-2 min-w-[16px] h-4 px-1 bg-orange-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center ring-2 ring-white">
                 {pendingSync > 9 ? "9+" : pendingSync}
               </span>
             )}
