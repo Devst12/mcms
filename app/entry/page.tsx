@@ -97,7 +97,7 @@ function SessionRow({
   state?: SessionState;
   ratePreview: number | null;
   saving: boolean;
-  accent: typeof ACCENT.cow;
+  accent: typeof ACCENT[MilkTypeKey];
   onChange: (field: string, value: string) => void;
   onSave: () => void;
   onDelete: () => void;
