@@ -13,7 +13,7 @@ export default async function FarmerDetail({ params }: { params: Promise<{ id: s
       <div className="text-center">
         <User size={56} strokeWidth={1} className="mx-auto text-gray-300 mb-3" />
         <h2 className="text-[17px] font-bold text-gray-900 mb-2">Farmer not found</h2>
-        <Link href="/farmers" className="text-sm text-blue-600 font-semibold">← Back to Farmers</Link>
+        <Link href="/farmers" className="text-sm text-gray-600 font-semibold hover:text-gray-900 transition-colors">← Back to Farmers</Link>
       </div>
     </div>
   );
@@ -137,7 +137,7 @@ export default async function FarmerDetail({ params }: { params: Promise<{ id: s
         <div>
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-[13px] font-bold text-gray-900">Recent Entries</h2>
-            <Link href={`/entries?farmerId=${id}`} className="text-sm text-blue-600 font-semibold flex items-center gap-1">
+            <Link href={`/entries?farmerId=${id}`} className="text-[13px] text-gray-500 font-semibold hover:text-gray-900 transition-colors flex items-center gap-1">
               View All <ExternalLink size={14} strokeWidth={2} />
             </Link>
           </div>

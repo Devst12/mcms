@@ -12,36 +12,41 @@ export default async function PaymentsPage() {
   const totalUnpaid = payments.filter((p) => !p.paid).reduce((s, p) => s + p.finalAmount, 0);
 
   return (
-    <div className="p-4 space-y-4 pb-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Payments 💵</h1>
-          {unpaidCount > 0 && (
-            <p className="text-sm text-gray-600 font-medium">
-              {unpaidCount} unpaid · Rs. {totalUnpaid.toFixed(2)}
-            </p>
-          )}
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-md mx-auto px-4 py-5 space-y-4 pb-10">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-[22px] font-bold text-gray-900 tracking-tight">भुक्तानी</h1>
+            {unpaidCount > 0 && (
+              <p className="text-[12.5px] text-gray-400 font-medium">
+                {unpaidCount} बाँकी · Rs. {totalUnpaid.toFixed(2)}
+              </p>
+            )}
+          </div>
+          <form action="/api/payments" method="POST">
+            <input type="hidden" name="month" value={currentMonth} />
+            <button
+              type="submit"
+              className="px-3.5 py-2 rounded-xl bg-gray-900 text-white font-semibold text-[13px] shadow-sm active:opacity-80 transition-opacity"
+            >
+              Calculate
+            </button>
+          </form>
         </div>
-        <form action="/api/payments" method="POST">
-          <input type="hidden" name="month" value={currentMonth} />
-          <button
-            type="submit"
-            className="px-5 py-3 min-h-touch bg-blue-600 text-white rounded-xl font-bold text-base shadow-[3px_3px_0_rgba(0,0,0,0.2)] active:shadow-none active:translate-x-[3px] active:translate-y-[3px] transition-all"
-          >
-            Calculate
-          </button>
-        </form>
-      </div>
 
-      {payments.length === 0 ? (
-        <div className="card text-center py-8">
-          <p className="text-4xl mb-3">💵</p>
-          <h2 className="text-xl font-bold mb-2">No payments yet</h2>
-          <p className="text-gray-600">Click &ldquo;Calculate&rdquo; to generate payments for the current month.</p>
-        </div>
-      ) : (
-        <PaymentsClient payments={payments} farmers={farmers} />
-      )}
+        {payments.length === 0 ? (
+          <div className="rounded-2xl bg-white shadow-sm text-center py-10 px-6">
+            <p className="text-3xl mb-3">💵</p>
+            <h2 className="text-[16px] font-bold text-gray-900 mb-1">अझै भुक्तानी छैन</h2>
+            <p className="text-[13px] text-gray-400">
+              &ldquo;Calculate&rdquo; थिचेर यो महिनाको भुक्तानी बनाउनुहोस्।
+            </p>
+          </div>
+        ) : (
+          <PaymentsClient payments={payments} farmers={farmers} />
+        )}
+      </div>
     </div>
   );
 }

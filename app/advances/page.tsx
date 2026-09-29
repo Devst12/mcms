@@ -3,29 +3,37 @@
 import { useState, useEffect } from "react";
 import AdvanceForm from "@/components/AdvanceForm";
 
+interface AdvanceData {
+  _id: string;
+  farmerId: string;
+  dateAD: string;
+  dateBS: string;
+  amount: number;
+  note: string;
+  settled: boolean;
+  createdAt: string;
+}
+
 export default function AdvancesPage() {
   const [farmers, setFarmers] = useState<Array<{ _id: string; name: string; code: string }>>([]);
-  const [advances, setAdvances] = useState<Array<{
-    _id: string;
-    farmerId: string;
-    dateAD: string;
-    dateBS: string;
-    amount: number;
-    note: string;
-    settled: boolean;
-    createdAt: string;
-  }>>([]);
-
-  const loadFarmers = () => {
-    fetch("/api/farmers")
-      .then((r) => r.json())
-      .then(setFarmers);
-  };
+  const [advances, setAdvances] = useState<AdvanceData[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const loadAdvances = () => {
     fetch("/api/advances")
       .then((r) => r.json())
-      .then(setAdvances);
+      .then((data) => {
+        if (Array.isArray(data)) setAdvances(data);
+      })
+      .finally(() => setLoading(false));
+  };
+
+  const loadFarmers = () => {
+    fetch("/api/farmers")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setFarmers(data);
+      });
   };
 
   useEffect(() => {
@@ -40,63 +48,86 @@ export default function AdvancesPage() {
   const totalPending = pendingAdvances.reduce((s, a) => s + a.amount, 0);
 
   return (
-    <div className="p-4 space-y-4 pb-8">
-      <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-md mx-auto px-4 py-5 space-y-4 pb-10">
+        {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold">Advances 💰</h1>
-          <p className="text-sm text-gray-600 font-medium">
-            {pendingAdvances.length} pending · Rs. {totalPending.toFixed(2)}
+          <h1 className="text-[22px] font-bold text-gray-900 tracking-tight">अग्रिम रकम</h1>
+          <p className="text-[12.5px] text-gray-400 font-medium">
+            {pendingAdvances.length} बाँकी · Rs. {totalPending.toFixed(2)}
           </p>
         </div>
+
+        <AdvanceForm farmers={farmers} onAdvanceAdded={loadAdvances} />
+
+        {/* Pending Advances */}
+        {pendingAdvances.length > 0 && (
+          <div className="rounded-2xl bg-amber-50 px-4 py-4">
+            <h2 className="text-[13px] font-bold text-amber-800 mb-2.5">बाँकी अग्रिम</h2>
+            <div className="space-y-2">
+              {pendingAdvances.map((a) => (
+                <div
+                  key={a._id}
+                  className="flex items-center justify-between rounded-xl bg-white px-3.5 py-2.5"
+                >
+                  <div className="min-w-0">
+                    <p className="text-[13.5px] font-bold text-gray-900 truncate">
+                      {farmerMap.get(a.farmerId) || a.farmerId}
+                    </p>
+                    <p className="text-[11px] text-gray-400 truncate">
+                      {a.dateBS} · {a.note || "Advance"}
+                    </p>
+                  </div>
+                  <p className="shrink-0 ml-2 font-bold text-[15px] text-red-600 tabular-nums">
+                    Rs. {a.amount.toFixed(2)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Settled Advances */}
+        {settledAdvances.length > 0 && (
+          <details className="rounded-2xl bg-white shadow-sm overflow-hidden">
+            <summary className="px-4 py-3 flex items-center justify-between cursor-pointer select-none">
+              <span className="text-[13px] font-bold text-gray-900">
+                मिलाइएको <span className="text-gray-400 font-medium">({settledAdvances.length})</span>
+              </span>
+              <span className="text-gray-300 text-[11px]">▾</span>
+            </summary>
+            <div className="px-2 pb-2 space-y-1">
+              {settledAdvances.map((a) => (
+                <div
+                  key={a._id}
+                  className="flex items-center justify-between rounded-xl px-2.5 py-2.5 opacity-60 hover:opacity-100 hover:bg-gray-50 transition-all"
+                >
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-bold text-gray-900 truncate">
+                      {farmerMap.get(a.farmerId) || a.farmerId}
+                    </p>
+                    <p className="text-[11px] text-gray-400 truncate">
+                      {a.dateBS} · {a.note || "Advance"}
+                    </p>
+                  </div>
+                  <p className="shrink-0 ml-2 text-[13px] font-semibold text-gray-400 line-through tabular-nums">
+                    Rs. {a.amount.toFixed(2)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+
+        {/* Empty state */}
+        {advances.length === 0 && !loading && (
+          <div className="rounded-2xl bg-white shadow-sm text-center py-10 px-6">
+            <p className="text-3xl mb-3">💰</p>
+            <h2 className="text-[16px] font-bold text-gray-900 mb-1">अझै अग्रिम रकम छैन</h2>
+            <p className="text-[13px] text-gray-400">माथिको फारम बाट किसानलाई अग्रिम दिनुहोस्।</p>
+          </div>
+        )}
       </div>
-
-      <AdvanceForm farmers={farmers} onAdvanceAdded={loadAdvances} />
-
-      {/* Pending Advances */}
-      {pendingAdvances.length > 0 && (
-        <div className="card border-amber-400 bg-amber-50">
-          <h2 className="text-lg font-bold mb-3 text-amber-800">Pending Advances</h2>
-          <div className="space-y-2">
-            {pendingAdvances.map((a) => (
-              <div key={a._id} className="flex items-center justify-between bg-white border-2 border-amber-300 rounded-xl px-4 py-3">
-                <div>
-                  <p className="font-bold text-sm">{farmerMap.get(a.farmerId) || a.farmerId}</p>
-                  <p className="text-xs text-gray-600">{a.dateBS} · {a.note || "Advance"}</p>
-                </div>
-                <p className="font-bold text-lg text-red-600 tabular-nums">Rs. {a.amount.toFixed(2)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Settled Advances */}
-      {settledAdvances.length > 0 && (
-        <details className="card border-green-300 bg-green-50/30">
-          <summary className="font-bold text-sm text-green-700 cursor-pointer">
-            Settled ({settledAdvances.length})
-          </summary>
-          <div className="mt-3 space-y-2">
-            {settledAdvances.map((a) => (
-              <div key={a._id} className="flex items-center justify-between bg-white border-2 border-gray-200 rounded-xl px-4 py-3 opacity-60">
-                <div>
-                  <p className="font-bold text-sm">{farmerMap.get(a.farmerId) || a.farmerId}</p>
-                  <p className="text-xs text-gray-600">{a.dateBS} · {a.note || "Advance"}</p>
-                </div>
-                <p className="font-bold text-sm text-gray-400 line-through tabular-nums">Rs. {a.amount.toFixed(2)}</p>
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
-
-      {advances.length === 0 && (
-        <div className="card text-center py-8">
-          <p className="text-4xl mb-3">💰</p>
-          <h2 className="text-xl font-bold mb-2">No advances yet</h2>
-          <p className="text-gray-600">Use the form above to give an advance to a farmer.</p>
-        </div>
-      )}
     </div>
   );
 }

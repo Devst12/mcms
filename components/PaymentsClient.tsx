@@ -28,15 +28,17 @@ export default function PaymentsClient({ payments, farmers }: { payments: Paymen
     setTimeout(() => setToast(null), 2000);
   };
 
-  const farmerMap = new Map(farmers.map((f) => [f._id, `${f.name} (${f.code})`]));
+  const farmerMap = new Map(
+    (Array.isArray(farmers) ? farmers : []).map((f) => [f._id, `${f.name} (${f.code})`])
+  );
 
   const handleMarkPaid = async (id: string) => {
     const res = await fetch(`/api/payments/${id}/pay`, { method: "POST" });
     if (res.ok) {
       setData(data.map((p) => (p._id === id ? { ...p, paid: true } : p)));
-      showToast("Marked as paid ✓");
+      showToast("भुक्तानी भयो ✓");
     } else {
-      showToast("Failed to mark as paid");
+      showToast("असफल भयो");
     }
   };
 
@@ -47,41 +49,43 @@ export default function PaymentsClient({ payments, farmers }: { payments: Paymen
     <div className="space-y-4">
       {unpaid.length > 0 && (
         <div className="space-y-2">
-          <h2 className="text-sm font-bold text-gray-600 uppercase tracking-wider">
+          <h2 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-0.5">
             Unpaid ({unpaid.length})
           </h2>
           {unpaid.map((p) => (
-            <div key={p._id} className="card border-red-300 bg-red-50">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <p className="font-bold text-base">{farmerMap.get(p.farmerId) || p.farmerId}</p>
-                  <p className="text-xs text-gray-600">{p.month}</p>
+            <div key={p._id} className="rounded-2xl bg-white shadow-sm px-4 py-4">
+              <div className="flex items-start justify-between mb-3">
+                <div className="min-w-0">
+                  <p className="text-[14px] font-bold text-gray-900 truncate">
+                    {farmerMap.get(p.farmerId) || p.farmerId}
+                  </p>
+                  <p className="text-[11px] text-gray-400">{p.month}</p>
                 </div>
-                <span className="px-3 py-1 bg-red-100 text-red-700 border-2 border-red-400 rounded-lg text-xs font-bold">
+                <span className="shrink-0 px-2.5 py-1 bg-red-50 text-red-600 rounded-full text-[11px] font-bold">
                   Unpaid
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-                <div className="bg-white rounded-lg p-2 border border-gray-200">
-                  <p className="text-xs text-gray-500">Milk Total</p>
-                  <p className="font-bold tabular-nums">{p.totalLiters.toFixed(1)} L</p>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="rounded-xl bg-gray-50 px-3 py-2">
+                  <p className="text-[10.5px] font-medium text-gray-400">Milk Total</p>
+                  <p className="text-[14px] font-bold tabular-nums text-gray-900">{p.totalLiters.toFixed(1)} L</p>
                 </div>
-                <div className="bg-white rounded-lg p-2 border border-gray-200">
-                  <p className="text-xs text-gray-500">Milk Amount</p>
-                  <p className="font-bold tabular-nums">Rs. {p.milkAmount.toFixed(2)}</p>
+                <div className="rounded-xl bg-gray-50 px-3 py-2">
+                  <p className="text-[10.5px] font-medium text-gray-400">Milk Amount</p>
+                  <p className="text-[14px] font-bold tabular-nums text-gray-900">Rs. {p.milkAmount.toFixed(2)}</p>
                 </div>
-                <div className="bg-white rounded-lg p-2 border border-gray-200">
-                  <p className="text-xs text-gray-500">Advance Deducted</p>
-                  <p className="font-bold tabular-nums text-red-600">- Rs. {p.advancesDeducted.toFixed(2)}</p>
+                <div className="rounded-xl bg-red-50 px-3 py-2">
+                  <p className="text-[10.5px] font-medium text-red-400">Advance</p>
+                  <p className="text-[14px] font-bold tabular-nums text-red-600">- Rs. {p.advancesDeducted.toFixed(2)}</p>
                 </div>
-                <div className="bg-green-50 rounded-lg p-2 border border-green-300">
-                  <p className="text-xs text-gray-500">Final Amount</p>
-                  <p className="font-bold tabular-nums text-green-700">Rs. {p.finalAmount.toFixed(2)}</p>
+                <div className="rounded-xl bg-green-50 px-3 py-2">
+                  <p className="text-[10.5px] font-medium text-green-600">Final</p>
+                  <p className="text-[14px] font-bold tabular-nums text-green-700">Rs. {p.finalAmount.toFixed(2)}</p>
                 </div>
               </div>
               <button
                 onClick={() => handleMarkPaid(p._id)}
-                className="w-full px-4 py-3 min-h-touch bg-green-600 text-white rounded-xl font-bold text-sm shadow-[2px_2px_0_rgba(0,0,0,0.2)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px] transition-all"
+                className="w-full py-3 rounded-xl bg-gray-900 text-white font-bold text-[13.5px] shadow-sm active:opacity-80 transition-opacity"
               >
                 ✓ Mark as Paid
               </button>
@@ -91,18 +95,26 @@ export default function PaymentsClient({ payments, farmers }: { payments: Paymen
       )}
 
       {paid.length > 0 && (
-        <details className="card border-green-400 bg-green-50/30">
-          <summary className="font-bold text-sm text-green-700 cursor-pointer">
-            Paid ({paid.length})
+        <details className="rounded-2xl bg-white shadow-sm overflow-hidden">
+          <summary className="px-4 py-3 flex items-center justify-between cursor-pointer select-none">
+            <span className="text-[13px] font-bold text-gray-900">
+              Paid <span className="text-gray-400 font-medium">({paid.length})</span>
+            </span>
+            <span className="text-gray-300 text-[11px]">▾</span>
           </summary>
-          <div className="mt-3 space-y-2">
+          <div className="px-2 pb-2 space-y-1">
             {paid.map((p) => (
-              <div key={p._id} className="flex items-center justify-between bg-white border-2 border-green-200 rounded-xl px-4 py-3 opacity-70">
-                <div>
-                  <p className="font-bold text-sm">{farmerMap.get(p.farmerId) || p.farmerId}</p>
-                  <p className="text-xs text-gray-600">{p.month}</p>
+              <div
+                key={p._id}
+                className="flex items-center justify-between rounded-xl px-2.5 py-2.5 opacity-60 hover:opacity-100 hover:bg-gray-50 transition-all"
+              >
+                <div className="min-w-0">
+                  <p className="text-[13px] font-bold text-gray-900 truncate">
+                    {farmerMap.get(p.farmerId) || p.farmerId}
+                  </p>
+                  <p className="text-[11px] text-gray-400">{p.month}</p>
                 </div>
-                <p className="font-bold text-sm text-green-700 tabular-nums">
+                <p className="shrink-0 ml-2 text-[13px] font-semibold text-green-700 tabular-nums">
                   Rs. {p.finalAmount.toFixed(2)} ✓
                 </p>
               </div>
@@ -112,17 +124,17 @@ export default function PaymentsClient({ payments, farmers }: { payments: Paymen
       )}
 
       {data.length === 0 && (
-        <div className="card text-center py-8">
-          <p className="text-4xl mb-3">💵</p>
-          <h2 className="text-xl font-bold mb-2">No payments found</h2>
-          <p className="text-gray-600">Generate payments from the reports section.</p>
+        <div className="rounded-2xl bg-white shadow-sm text-center py-10 px-6">
+          <p className="text-3xl mb-3">💵</p>
+          <h2 className="text-[16px] font-bold text-gray-900 mb-1">कुनै भुक्तानी फेला परेन</h2>
+          <p className="text-[13px] text-gray-400">Calculate थिचेर भुक्तानी बनाउनुहोस्।</p>
         </div>
       )}
 
       {/* Toast */}
       {toast && (
         <div className="fixed bottom-24 left-4 right-4 z-50">
-          <div className="bg-gray-900 text-white text-center py-3 px-4 rounded-xl font-bold text-sm shadow-lg max-w-sm mx-auto">
+          <div className="bg-gray-900 text-white text-center py-3 px-4 rounded-full font-semibold text-[13px] shadow-lg max-w-sm mx-auto">
             {toast}
           </div>
         </div>

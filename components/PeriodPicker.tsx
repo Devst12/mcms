@@ -15,41 +15,43 @@ interface PeriodPickerProps {
 
 export default function PeriodPicker({ value, onChange }: PeriodPickerProps) {
   const periods: { key: PeriodType; label: string }[] = [
-    { key: "thisMonth", label: "This Month" },
-    { key: "twoMonths", label: "2 Months" },
-    { key: "thisYear", label: "This Year" },
-    { key: "allTime", label: "All Time" },
-    { key: "custom", label: "Custom" },
+    { key: "thisMonth", label: "यो महिना" },
+    { key: "twoMonths", label: "२ महिना" },
+    { key: "thisYear", label: "यो वर्ष" },
+    { key: "allTime", label: "सबै" },
+    { key: "custom", label: "अन्य" },
   ];
 
   return (
-    <div className="flex flex-wrap gap-2 mb-4">
-      {periods.map((p) => (
-        <button
-          key={p.key}
-          onClick={() => onChange({ type: p.key, from: value.from, to: value.to })}
-          className={`px-4 py-2 min-h-touch rounded-lg text-sm font-medium transition-colors ${
-            value.type === p.key
-              ? "bg-blue-600 text-white"
-              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-          }`}
-        >
-          {p.label}
-        </button>
-      ))}
+    <div className="space-y-2.5">
+      <div className="flex flex-wrap gap-1.5">
+        {periods.map((p) => (
+          <button
+            key={p.key}
+            onClick={() => onChange({ type: p.key, from: value.from, to: value.to })}
+            className={`px-3.5 py-1.5 rounded-full text-[12.5px] font-semibold transition-colors ${
+              value.type === p.key
+                ? "bg-gray-900 text-white shadow-sm"
+                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
       {value.type === "custom" && (
         <div className="flex gap-2">
           <input
             type="date"
             value={value.from || ""}
             onChange={(e) => onChange({ ...value, from: e.target.value })}
-            className="px-3 py-2 border rounded-lg min-h-touch"
+            className="flex-1 px-3 py-2 rounded-lg bg-gray-50 text-[13px] font-semibold text-gray-800 outline-none ring-1 ring-inset ring-gray-200 focus:ring-2 focus:ring-gray-400 transition-shadow"
           />
           <input
             type="date"
             value={value.to || ""}
             onChange={(e) => onChange({ ...value, to: e.target.value })}
-            className="px-3 py-2 border rounded-lg min-h-touch"
+            className="flex-1 px-3 py-2 rounded-lg bg-gray-50 text-[13px] font-semibold text-gray-800 outline-none ring-1 ring-inset ring-gray-200 focus:ring-2 focus:ring-gray-400 transition-shadow"
           />
         </div>
       )}

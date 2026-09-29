@@ -7,23 +7,19 @@ interface MilkTypeToggleProps {
 
 export default function MilkTypeToggle({ value, onChange }: MilkTypeToggleProps) {
   return (
-    <div className="flex gap-2 mb-4">
+    <div className="inline-flex p-0.5 rounded-lg bg-gray-100 gap-0.5">
       <button
         onClick={() => onChange("cow")}
-        className={`flex items-center gap-2 px-6 py-3 min-h-touch rounded-xl text-base font-bold transition-colors ${
-          value === "cow"
-            ? "bg-cow text-gray-900 border-2 border-gray-800"
-            : "bg-gray-100 text-gray-500 border-2 border-transparent"
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-semibold transition-colors ${
+          value === "cow" ? "bg-white text-gray-900 shadow-sm" : "text-gray-400"
         }`}
       >
         🐄 Cow
       </button>
       <button
         onClick={() => onChange("buffalo")}
-        className={`flex items-center gap-2 px-6 py-3 min-h-touch rounded-xl text-base font-bold transition-colors ${
-          value === "buffalo"
-            ? "bg-buffalo text-gray-900 border-2 border-gray-800"
-            : "bg-gray-100 text-gray-500 border-2 border-transparent"
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-semibold transition-colors ${
+          value === "buffalo" ? "bg-white text-gray-900 shadow-sm" : "text-gray-400"
         }`}
       >
         🐃 Buffalo

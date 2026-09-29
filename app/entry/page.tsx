@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { getTodayBs } from "@/lib/nepali-dates";
 import { saveEntryLocal, queueForSync } from "@/lib/indexed-db";
 
@@ -318,7 +319,9 @@ function DailyEntryInner() {
   useEffect(() => {
     fetch("/api/farmers")
       .then((r) => r.json())
-      .then(setFarmers);
+      .then((data) => {
+        if (Array.isArray(data)) setFarmers(data);
+      });
   }, []);
 
   useEffect(() => {
@@ -358,7 +361,9 @@ function DailyEntryInner() {
       try {
         const res = await fetch(`/api/entries?${params}`);
         if (!res.ok) throw new Error("Failed to fetch entries");
-        const data = (await res.json()) as Array<{
+        const json = await res.json();
+        if (!Array.isArray(json)) throw new Error("Unexpected response");
+        const data = json as Array<{
           _id: string;
           farmerId: string;
           milkType: string;
@@ -707,12 +712,12 @@ function DailyEntryInner() {
             <p className="text-[13px] text-gray-400 mb-5">
               Add farmers first before you can record milk collection.
             </p>
-            <a
+            <Link
               href="/farmers/new"
               className="inline-block px-5 py-2.5 rounded-full bg-gray-900 text-white text-[13px] font-semibold"
             >
               Add Farmer →
-            </a>
+            </Link>
           </div>
         )}
 

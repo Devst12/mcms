@@ -78,8 +78,8 @@ function EntriesInner() {
     params.set("dateFrom", from);
     params.set("dateTo", to);
     const res = await fetch(`/api/entries?${params}`);
-    const data = (await res.json()) as EntryData[];
-    setEntries(data);
+    const json = await res.json();
+    setEntries(Array.isArray(json) ? json : []);
     setLoading(false);
   }, [selectedFarmer, period]);
 
@@ -99,7 +99,7 @@ function EntriesInner() {
     fetch("/api/farmers")
       .then((r) => r.json())
       .then((data) => {
-        if (!cancelled) setFarmers(data);
+        if (!cancelled && Array.isArray(data)) setFarmers(data);
       });
     return () => {
       cancelled = true;

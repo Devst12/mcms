@@ -2,11 +2,15 @@ import Link from "next/link";
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4">
-      <h1 className="text-3xl font-bold mb-2">404</h1>
-      <p className="text-lg mb-4">Page not found</p>
-      <Link href="/" className="px-4 py-3 bg-blue-600 text-white rounded-lg font-medium min-h-touch">
-        Go Home
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
+      <p className="text-4xl mb-3">🥛</p>
+      <h1 className="text-[22px] font-bold text-gray-900 mb-1">४०४</h1>
+      <p className="text-[13.5px] text-gray-400 mb-5">पृष्ठ फेला परेन</p>
+      <Link
+        href="/"
+        className="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-gray-900 text-white font-bold text-[14px] shadow-sm active:opacity-80 transition-opacity"
+      >
+        घर जानुहोस्
       </Link>
     </div>
   );
