@@ -1,24 +1,7 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Mukta } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-const mukta = Mukta({
-  variable: "--font-mukta",
-  subsets: ["devanagari"],
-  weight: ["400", "600", "700"],
-});
 
 export const metadata: Metadata = {
   title: "Dudh Hisab — दूध हिसाब",
@@ -33,10 +16,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="ne"
-      className={`${geistSans.variable} ${geistMono.variable} ${mukta.variable} h-full antialiased`}
-    >
+    <html lang="ne" className="h-full antialiased">
       <body
         className="min-h-full flex flex-col pb-[calc(64px+var(--safe-area-bottom))]"
         style={{ paddingBottom: "calc(64px + var(--safe-area-bottom))" }}
