@@ -59,7 +59,21 @@ export async function getEntries(dateFrom?: string, dateTo?: string, farmerId?: 
   if (farmerId) query.farmerId = farmerId;
   if (milkType) query.milkType = milkType;
   if (session) query.session = session;
-  return db.collection<Entry>("entries").find(query).sort({ dateAD: -1 }).toArray();
+  const entries = await db.collection<Entry>("entries").find(query).sort({ dateAD: -1 }).toArray();
+  const latestBySession = new Map<string, Entry>();
+  for (const entry of entries) {
+    // A farmer can have one record per date, milk type, and session. Older sync
+    // attempts may have inserted the same session more than once; report only
+    // its latest copy so totals and tables don't double count it.
+    const key = entry.session
+      ? `${entry.dateAD}_${entry.farmerId}_${entry.milkType}_${entry.session}`
+      : `${entry._id}`;
+    const previous = latestBySession.get(key);
+    if (!previous || (entry.createdAt || "") > (previous.createdAt || "")) {
+      latestBySession.set(key, entry);
+    }
+  }
+  return [...latestBySession.values()].sort((a, b) => b.dateAD.localeCompare(a.dateAD));
 }
 
 export async function createEntry(data: Omit<Entry, "_id" | "createdAt">): Promise<Entry> {
@@ -82,7 +96,7 @@ export async function upsertEntryBySession(data: Omit<Entry, "_id" | "createdAt"
     milkType: data.milkType,
     session,
   };
-  const existing = await db.collection<Entry>("entries").findOne(filter);
+  const existing = await db.collection<Entry>("entries").findOne(filter, { sort: { createdAt: -1 } });
   if (!existing) return createEntry({ ...data, session });
 
   await db.collection<Entry>("entries").updateOne(

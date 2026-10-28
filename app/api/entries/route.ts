@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       farmerId: body.farmerId,
       milkType: body.milkType,
       session,
-    });
+    }, { sort: { createdAt: -1 } });
 
     if (existing) {
       let rateUsed = body.rateUsed;
