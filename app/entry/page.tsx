@@ -8,12 +8,11 @@ import {
   getEntriesLocal,
   getFarmersLocal,
   getRateSlabLocal,
-  markSynced,
-  queueForSync,
   saveEntryLocal,
   saveFarmersLocal,
   saveRateSlabLocal,
 } from "@/lib/indexed-db";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 export const dynamic = "force-dynamic";
 
@@ -335,7 +334,7 @@ function DailyEntryInner() {
         }
       } catch {}
       try {
-        const response = await fetch("/api/farmers");
+        const response = await fetchWithTimeout("/api/farmers", {}, 8000);
         if (!response.ok) return;
         const data = await response.json();
         if (Array.isArray(data)) {
@@ -359,7 +358,7 @@ function DailyEntryInner() {
         const start = new Date(`${dateTo}T00:00:00`);
         start.setDate(start.getDate() - 90);
         const dateFrom = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
-        const response = await fetch(`/api/entries?dateFrom=${dateFrom}&dateTo=${dateTo}`);
+        const response = await fetchWithTimeout(`/api/entries?dateFrom=${dateFrom}&dateTo=${dateTo}`, {}, 10000);
         if (!response.ok) return;
         const entries = await response.json();
         if (Array.isArray(entries)) {
@@ -367,6 +366,24 @@ function DailyEntryInner() {
         }
       } catch {
         // Keep existing device data if recent history cannot be refreshed.
+      }
+      try {
+        const [cowResponse, buffaloResponse] = await Promise.all([
+          fetchWithTimeout("/api/rates?milkType=cow", {}, 8000),
+          fetchWithTimeout("/api/rates?milkType=buffalo", {}, 8000),
+        ]);
+        const schedules = await Promise.all([
+          cowResponse.ok ? cowResponse.json() : [],
+          buffaloResponse.ok ? buffaloResponse.json() : [],
+        ]);
+        await Promise.all(schedules.flatMap((items, index) => {
+          const type = index === 0 ? "cow" : "buffalo";
+          return Array.isArray(items) ? items.map((item) =>
+            saveRateSlabLocal(type, item.effectiveFromAD, item.slabs || [], item.effectiveFromAD)
+          ) : [];
+        }));
+      } catch {
+        // Existing offline rate schedules remain available.
       }
     };
     void cacheRecentEntries();
@@ -390,19 +407,19 @@ function DailyEntryInner() {
       } catch {}
       try {
       const [cowRes, bufRes] = await Promise.all([
-        fetch(`/api/rates?milkType=cow&dateAD=${dateAd}`),
-        fetch(`/api/rates?milkType=buffalo&dateAD=${dateAd}`),
+        fetchWithTimeout(`/api/rates?milkType=cow&dateAD=${dateAd}`, {}, 6000),
+        fetchWithTimeout(`/api/rates?milkType=buffalo&dateAD=${dateAd}`, {}, 6000),
       ]);
       if (!cancelled) {
         if (cowRes.ok) {
           const data = await cowRes.json();
           setCowSlabs(data?.slabs || []);
-          await saveRateSlabLocal("cow", dateAd, data?.slabs || []);
+          await saveRateSlabLocal("cow", dateAd, data?.slabs || [], data?.effectiveFromAD || dateAd);
         }
         if (bufRes.ok) {
           const data = await bufRes.json();
           setBuffaloSlabs(data?.slabs || []);
-          await saveRateSlabLocal("buffalo", dateAd, data?.slabs || []);
+          await saveRateSlabLocal("buffalo", dateAd, data?.slabs || [], data?.effectiveFromAD || dateAd);
         }
       }
       } catch {
@@ -469,7 +486,7 @@ function DailyEntryInner() {
           morningQty: number; eveningQty: number; fatPercent: number; rateUsed: number; synced?: boolean;
         }>;
         if (!cancelled && localEntries.length) asSessions(localEntries);
-        const res = await fetch(`/api/entries?${params}`);
+        const res = await fetchWithTimeout(`/api/entries?${params}`, {}, 6000);
         if (!res.ok) throw new Error("Failed to fetch entries");
         const json = await res.json();
         if (!Array.isArray(json)) throw new Error("Unexpected response");
@@ -555,59 +572,32 @@ function DailyEntryInner() {
     setSavingKeys((prev) => ({ ...prev, [key]: true }));
     try {
       await saveEntryLocal(payload);
-      await queueForSync({ id: localId, collection: "entries", data: payload });
     } catch {
       alert("Could not save this entry on this phone. Please check device storage and try again.");
       setSavingKeys((prev) => ({ ...prev, [key]: false }));
       return;
     }
 
-    try {
-      const res = await fetch("/api/entries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("Failed to sync entry");
-      const saved = await res.json();
-      await saveEntryLocal({ ...payload, _id: saved._id, synced: true });
-      await markSynced("entries", localId);
-      setSessions((prev) => ({
-        ...prev,
-        [key]: {
-          _id: saved._id,
-          farmerId,
-          milkType,
-          session,
-          qty: String(qty),
-          fat: String(fatPercent),
-          rateUsed,
-          saved: true,
-          saving: false,
-        },
-      }));
-      setTotalLiters((prev) => prev + qty);
-      setTotalAmount((prev) => prev + qty * rateUsed);
-    } catch {
-      setSessions((prev) => ({
-        ...prev,
-        [key]: {
-          _id: localId,
-          farmerId,
-          milkType,
-          session,
-          qty: String(qty),
-          fat: String(fatPercent),
-          rateUsed,
-          saved: true,
-          saving: false,
-        },
-      }));
-      setTotalLiters((prev) => prev + qty);
-      setTotalAmount((prev) => prev + qty * rateUsed);
-    } finally {
-      setSavingKeys((prev) => ({ ...prev, [key]: false }));
-    }
+    setSessions((prev) => ({
+      ...prev,
+      [key]: {
+        _id: localId,
+        farmerId,
+        milkType,
+        session,
+        qty: String(qty),
+        fat: String(fatPercent),
+        rateUsed,
+        saved: true,
+        saving: false,
+      },
+    }));
+    setTotalLiters((prev) => prev + qty);
+    setTotalAmount((prev) => prev + qty * rateUsed);
+    setSavingKeys((prev) => ({ ...prev, [key]: false }));
+
+    // Sync separately so even a slow network never delays the local save.
+    window.dispatchEvent(new Event("local-data-saved"));
   };
 
   const deleteSession = async (farmerId: string, milkType: MilkTypeKey, session: SessionKey) => {

@@ -6,6 +6,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import PeriodPicker, { type Period } from "@/components/PeriodPicker";
 import Modal from "@/components/Modal";
 import { getEntriesLocalRange, getFarmersLocal, saveEntryLocal, saveFarmersLocal } from "@/lib/indexed-db";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 interface EntryData {
   _id: string;
@@ -36,6 +37,88 @@ const MILK_ACCENT = {
   cow: { bg: "bg-amber-50", text: "text-amber-700" },
   buffalo: { bg: "bg-teal-50", text: "text-teal-700" },
 } as const;
+
+function ManageEntries({
+  group,
+  editingId,
+  editForm,
+  onEdit,
+  onDelete,
+  onEditFormChange,
+  onSave,
+  onCancel,
+}: {
+  group: FarmerDayGroup;
+  editingId: string | null;
+  editForm: { morning: string; evening: string; fat: string };
+  onEdit: (entry: EntryData) => void;
+  onDelete: (id: string) => void;
+  onEditFormChange: (field: "morning" | "evening" | "fat", value: string) => void;
+  onSave: (entry: EntryData) => void;
+  onCancel: () => void;
+}) {
+  const renderMilkType = (type: "cow" | "buffalo") => {
+    const entries = group[type];
+    return (
+      <section key={type} className={`rounded-lg ${MILK_ACCENT[type].bg} p-2.5`}>
+        <h4 className={`mb-2 text-xs font-bold ${MILK_ACCENT[type].text}`}>{type === "cow" ? "Cow" : "Buffalo"}</h4>
+        <div className="grid grid-cols-2 gap-2">
+          {(["morning", "evening"] as const).map((session) => {
+            const field = session === "morning" ? "morningQty" : "eveningQty";
+            const matching = entries.filter((entry) => {
+              if (entry.session === "both") return entry[field] > 0;
+              if (entry.session) return entry.session === session;
+              return entry[field] > 0;
+            });
+            const quantity = matching.reduce((total, entry) => total + entry[field], 0);
+            return (
+              <div key={session} className="rounded-md bg-white/80 p-2">
+                <p className="text-[10px] font-medium uppercase text-gray-400">{session === "morning" ? "AM" : "PM"}</p>
+                <p className="text-sm font-bold tabular-nums text-gray-900">{quantity.toFixed(1)} L</p>
+                {matching.map((entry) => (
+                  <div key={entry._id} className="mt-1 flex items-center justify-between border-t border-gray-100 pt-1">
+                    <span className="text-[10px] text-gray-500">Fat {entry.fatPercent.toFixed(1)}%</span>
+                    <div className="flex gap-1">
+                      <button onClick={() => onEdit(entry)} aria-label={`Edit ${type} ${session}`} className="rounded p-1 text-gray-500"><Pencil size={12} /></button>
+                      <button onClick={() => onDelete(entry._id)} aria-label={`Delete ${type} ${session}`} className="rounded p-1 text-gray-500 hover:text-red-600"><Trash2 size={12} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+        {entries.filter((entry) => entry._id === editingId).map((entry) => (
+          <div key={entry._id} className="mt-2 space-y-2 rounded-md bg-white p-2">
+            <div className="grid grid-cols-3 gap-1.5">
+              {(["morning", "evening", "fat"] as const).map((field) => (
+                <label key={field} className="text-[10px] text-gray-500">
+                  {field === "morning" ? "AM L" : field === "evening" ? "PM L" : "Fat %"}
+                  <input type="number" step="0.1" value={editForm[field]} onChange={(event) => onEditFormChange(field, event.target.value)} className="mt-1 w-full rounded bg-gray-50 p-1.5 text-center text-xs" />
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => onSave(entry)} className="flex-1 rounded bg-gray-900 py-2 text-xs font-semibold text-white">Save</button>
+              <button onClick={onCancel} className="flex-1 rounded bg-gray-100 py-2 text-xs font-semibold text-gray-600">Cancel</button>
+            </div>
+          </div>
+        ))}
+      </section>
+    );
+  };
+
+  const count = group.cow.length + group.buffalo.length;
+  return (
+    <details className="mt-2 border-t border-gray-100 pt-2" open={[...group.cow, ...group.buffalo].some((entry) => entry._id === editingId)}>
+      <summary className="cursor-pointer py-1 text-[11px] font-semibold text-gray-500">Manage entries ({count})</summary>
+      <div className="space-y-2 pt-2">
+        {renderMilkType("cow")}
+        {renderMilkType("buffalo")}
+      </div>
+    </details>
+  );
+}
 
 function EntriesInner() {
   const searchParams = useSearchParams();
@@ -90,8 +173,15 @@ function EntriesInner() {
     if (selectedFarmer) params.set("farmerId", selectedFarmer);
     params.set("dateFrom", from);
     params.set("dateTo", to);
+    const cachedAtStart = await getEntriesLocalRange(from, to).catch(() => []) as unknown as EntryData[];
+    if (cachedAtStart.length) {
+      setEntries(cachedAtStart
+        .filter((entry) => !selectedFarmer || entry.farmerId === selectedFarmer)
+        .map((entry) => ({ ...entry, _id: entry._id || entry.id || "" })));
+      setLoading(false);
+    }
     try {
-      const res = await fetch(`/api/entries?${params}`);
+      const res = await fetchWithTimeout(`/api/entries?${params}`, {}, 6000);
       if (!res.ok) throw new Error("Could not load entries from server");
       const json = await res.json();
       const remote = Array.isArray(json) ? json as EntryData[] : [];
@@ -134,7 +224,7 @@ function EntriesInner() {
         setFarmers(local.map((farmer) => ({ _id: String(farmer._id || farmer.id), name: String(farmer.name || ""), code: String(farmer.code || "") })));
       }
       try {
-        const response = await fetch("/api/farmers");
+        const response = await fetchWithTimeout("/api/farmers", {}, 6000);
         if (!response.ok) return;
         const data = await response.json();
         if (Array.isArray(data)) {
@@ -169,11 +259,17 @@ function EntriesInner() {
     const morningQty = parseFloat(editForm.morning) || 0;
     const eveningQty = parseFloat(editForm.evening) || 0;
     const fatPercent = parseFloat(editForm.fat) || 0;
-    const res = await fetch(`/api/entries/${entry._id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ morningQty, eveningQty, fatPercent }),
-    });
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(`/api/entries/${entry._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ morningQty, eveningQty, fatPercent }),
+      }, 6000);
+    } catch {
+      showToast("Network is slow or offline. Entry was not changed.");
+      return;
+    }
     if (res.ok) {
       cancelEdit();
       showToast("Entry updated ✓");
@@ -185,7 +281,13 @@ function EntriesInner() {
 
   const confirmDelete = async () => {
     if (!deleteId) return;
-    const res = await fetch(`/api/entries/${deleteId}`, { method: "DELETE" });
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(`/api/entries/${deleteId}`, { method: "DELETE" }, 6000);
+    } catch {
+      showToast("Network is slow or offline. Entry was not deleted.");
+      return;
+    }
     setDeleteId(null);
     if (res.ok) {
       showToast("Entry deleted ✓");
@@ -272,42 +374,8 @@ function EntriesInner() {
                 {/* One farmer card with Cow and Buffalo side by side on phones */}
                 <div className="md:hidden px-3 pb-3 space-y-2">
                   {dayGroups.map((group) => {
-                    const allEntries = [...group.cow, ...group.buffalo];
                     const sum = (list: EntryData[], field: "morningQty" | "eveningQty") =>
                       list.reduce((total, entry) => total + entry[field], 0);
-                    const renderManage = () => (
-                      <details className="mt-2 border-t border-gray-100 pt-2" open={allEntries.some((entry) => entry._id === editingId)}>
-                        <summary className="cursor-pointer py-1 text-[11px] font-semibold text-gray-500">Manage entries ({allEntries.length})</summary>
-                        <div className="space-y-2 pt-2">
-                          {allEntries.map((entry) => (
-                            <div key={entry._id} className="rounded-lg bg-gray-50 p-2.5">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className={`text-xs font-semibold ${MILK_ACCENT[entry.milkType].text}`}>
-                                  {entry.milkType === "cow" ? "Cow" : "Buffalo"} · {entry.morningQty > 0 && entry.eveningQty > 0 ? "AM + PM" : entry.eveningQty > 0 ? "PM" : "AM"}
-                                </span>
-                                <div className="flex gap-1">
-                                  <button onClick={() => startEdit(entry)} className="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:bg-white" aria-label="Edit entry"><Pencil size={14} /></button>
-                                  <button onClick={() => setDeleteId(entry._id)} className="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-600" aria-label="Delete entry"><Trash2 size={14} /></button>
-                                </div>
-                              </div>
-                              {editingId === entry._id && (
-                                <div className="mt-2 space-y-2">
-                                  <div className="grid grid-cols-3 gap-2">
-                                    <label className="text-[10px] text-gray-500">AM<input type="number" step="0.1" value={editForm.morning} onChange={(event) => setEditForm({ ...editForm, morning: event.target.value })} className="mt-1 w-full rounded-md bg-white p-2 text-center text-sm" /></label>
-                                    <label className="text-[10px] text-gray-500">PM<input type="number" step="0.1" value={editForm.evening} onChange={(event) => setEditForm({ ...editForm, evening: event.target.value })} className="mt-1 w-full rounded-md bg-white p-2 text-center text-sm" /></label>
-                                    <label className="text-[10px] text-gray-500">Fat %<input type="number" step="0.1" value={editForm.fat} onChange={(event) => setEditForm({ ...editForm, fat: event.target.value })} className="mt-1 w-full rounded-md bg-white p-2 text-center text-sm" /></label>
-                                  </div>
-                                  <div className="flex gap-2">
-                                    <button onClick={() => saveEdit(entry)} className="flex-1 rounded-lg bg-gray-900 py-2 text-xs font-semibold text-white">Save</button>
-                                    <button onClick={cancelEdit} className="flex-1 rounded-lg bg-white py-2 text-xs font-semibold text-gray-600">Cancel</button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    );
                     return (
                       <div key={group.farmerId} className="rounded-xl border border-gray-100 bg-white px-3 py-3">
                         <p className="mb-2 text-[13px] font-bold text-gray-900">{group.farmerName}</p>
@@ -324,7 +392,16 @@ function EntriesInner() {
                             );
                           })}
                         </div>
-                        {renderManage()}
+                        <ManageEntries
+                          group={group}
+                          editingId={editingId}
+                          editForm={editForm}
+                          onEdit={startEdit}
+                          onDelete={setDeleteId}
+                          onEditFormChange={(field, value) => setEditForm((form) => ({ ...form, [field]: value }))}
+                          onSave={saveEdit}
+                          onCancel={cancelEdit}
+                        />
                       </div>
                     );
                   })}
@@ -349,7 +426,6 @@ function EntriesInner() {
                       {dayGroups.map((group) => {
                         const sum = (list: EntryData[], field: "morningQty" | "eveningQty") => list.reduce((total, entry) => total + entry[field], 0);
                         const amount = [...group.cow, ...group.buffalo].reduce((total, entry) => total + (entry.morningQty + entry.eveningQty) * entry.rateUsed, 0);
-                        const allEntries = [...group.cow, ...group.buffalo];
                         return (
                           <tr key={group.farmerId} className="text-gray-700">
                             <td className="px-2 py-3 font-semibold text-gray-900">{group.farmerName}</td>
@@ -360,20 +436,16 @@ function EntriesInner() {
                             })}
                             <td className="px-2 py-3 text-right font-bold tabular-nums">Rs {amount.toFixed(2)}</td>
                             <td className="px-2 py-3">
-                              <details open={allEntries.some((entry) => entry._id === editingId)}>
-                                <summary className="cursor-pointer text-xs font-semibold text-gray-500">{allEntries.length} records</summary>
-                                <div className="absolute z-10 mt-1 max-h-72 w-80 overflow-auto rounded-xl border border-gray-100 bg-white p-2 shadow-xl">
-                                  {allEntries.map((entry) => (
-                                    <div key={entry._id} className="border-b border-gray-100 p-2 last:border-0">
-                                      <div className="flex items-center justify-between text-xs">
-                                        <span className={`font-semibold ${MILK_ACCENT[entry.milkType].text}`}>{entry.milkType === "cow" ? "Cow" : "Buffalo"} · AM {entry.morningQty.toFixed(1)} · PM {entry.eveningQty.toFixed(1)} · Fat {entry.fatPercent.toFixed(1)}%</span>
-                                        <span className="flex gap-1"><button onClick={() => startEdit(entry)} aria-label="Edit entry" className="p-1 text-gray-500"><Pencil size={13} /></button><button onClick={() => setDeleteId(entry._id)} aria-label="Delete entry" className="p-1 text-gray-500 hover:text-red-600"><Trash2 size={13} /></button></span>
-                                      </div>
-                                      {editingId === entry._id && <div className="mt-2 space-y-2"><div className="grid grid-cols-3 gap-1"><input aria-label="Morning liters" type="number" step="0.1" value={editForm.morning} onChange={(event) => setEditForm({ ...editForm, morning: event.target.value })} className="w-full rounded bg-gray-50 p-1.5 text-xs" /><input aria-label="Evening liters" type="number" step="0.1" value={editForm.evening} onChange={(event) => setEditForm({ ...editForm, evening: event.target.value })} className="w-full rounded bg-gray-50 p-1.5 text-xs" /><input aria-label="Fat percent" type="number" step="0.1" value={editForm.fat} onChange={(event) => setEditForm({ ...editForm, fat: event.target.value })} className="w-full rounded bg-gray-50 p-1.5 text-xs" /></div><div className="flex gap-2"><button onClick={() => saveEdit(entry)} className="flex-1 rounded bg-gray-900 py-1.5 text-xs text-white">Save</button><button onClick={cancelEdit} className="flex-1 rounded bg-gray-100 py-1.5 text-xs">Cancel</button></div></div>}
-                                    </div>
-                                  ))}
-                                </div>
-                              </details>
+                              <ManageEntries
+                                group={group}
+                                editingId={editingId}
+                                editForm={editForm}
+                                onEdit={startEdit}
+                                onDelete={setDeleteId}
+                                onEditFormChange={(field, value) => setEditForm((form) => ({ ...form, [field]: value }))}
+                                onSave={saveEdit}
+                                onCancel={cancelEdit}
+                              />
                             </td>
                           </tr>
                         );

@@ -88,10 +88,17 @@ export async function getFarmersLocal(): Promise<Record<string, unknown>[]> {
 export async function saveRateSlabLocal(
   milkType: string,
   dateAD: string,
-  slabs: Record<string, unknown>[]
+  slabs: Record<string, unknown>[],
+  effectiveFromAD = dateAD
 ): Promise<void> {
   const db = await getDb();
-  await db.put("rate_slabs", { id: `${dateAD}_${milkType}`, milkType, dateAD, slabs });
+  await db.put("rate_slabs", {
+    id: `${effectiveFromAD}_${milkType}`,
+    milkType,
+    dateAD: effectiveFromAD,
+    effectiveFromAD,
+    slabs,
+  });
 }
 
 export async function getRateSlabLocal(
@@ -99,7 +106,12 @@ export async function getRateSlabLocal(
   dateAD: string
 ): Promise<Record<string, unknown> | undefined> {
   const db = await getDb();
-  return db.get("rate_slabs", `${dateAD}_${milkType}`);
+  const cached = await db.get("rate_slabs", `${dateAD}_${milkType}`);
+  if (cached) return cached;
+  const candidates = (await db.getAll("rate_slabs"))
+    .filter((item) => item.milkType === milkType && String(item.effectiveFromAD || item.dateAD || "") <= dateAD)
+    .sort((a, b) => String(b.effectiveFromAD || b.dateAD).localeCompare(String(a.effectiveFromAD || a.dateAD)));
+  return candidates[0];
 }
 
 export async function saveCompanyCollectionLocal(cc: Record<string, unknown>): Promise<void> {

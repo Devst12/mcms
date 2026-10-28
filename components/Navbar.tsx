@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Plus, ClipboardList, Users, MoreHorizontal, RefreshCw } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { getUnsyncedItems, markSynced } from "@/lib/indexed-db";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 // Left/right of the center FAB — "दूध थप्नुहोस्" is promoted to its own
 // floating action button instead of competing as a fifth flat tab.
@@ -59,6 +60,8 @@ export default function Navbar() {
   const [syncing, setSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+  const syncInFlight = useRef(false);
+  const syncAgain = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,6 +76,7 @@ export default function Navbar() {
       }
     };
     updatePendingCount();
+    window.addEventListener("local-data-saved", updatePendingCount);
     const updateOnline = () => setIsOnline(navigator.onLine);
     updateOnline();
     window.addEventListener("online", updateOnline);
@@ -81,12 +85,18 @@ export default function Navbar() {
     return () => {
       cancelled = true;
       clearInterval(interval);
+      window.removeEventListener("local-data-saved", updatePendingCount);
       window.removeEventListener("online", updateOnline);
       window.removeEventListener("offline", updateOnline);
     };
   }, []);
 
   const handleSync = useCallback(async () => {
+    if (syncInFlight.current) {
+      syncAgain.current = true;
+      return;
+    }
+    syncInFlight.current = true;
     setSyncing(true);
     try {
       const entries = await getUnsyncedItems("entries");
@@ -104,11 +114,11 @@ export default function Navbar() {
         return;
       }
 
-      const res = await fetch("/api/sync", {
+      const res = await fetchWithTimeout("/api/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items }),
-      });
+      }, 10000);
 
       if (res.ok) {
         const result = await res.json();
@@ -137,7 +147,12 @@ export default function Navbar() {
     } catch (err) {
       console.error("Sync failed", err);
     } finally {
+      syncInFlight.current = false;
       setSyncing(false);
+      if (syncAgain.current) {
+        syncAgain.current = false;
+        window.setTimeout(() => window.dispatchEvent(new Event("local-data-saved")), 0);
+      }
     }
   }, []);
 
@@ -146,10 +161,12 @@ export default function Navbar() {
       if (navigator.onLine) void handleSync();
     };
     window.addEventListener("online", syncWhenOnline);
+    window.addEventListener("local-data-saved", syncWhenOnline);
     if (navigator.onLine) syncWhenOnline();
     const interval = setInterval(syncWhenOnline, 60000);
     return () => {
       window.removeEventListener("online", syncWhenOnline);
+      window.removeEventListener("local-data-saved", syncWhenOnline);
       clearInterval(interval);
     };
   }, [handleSync]);
