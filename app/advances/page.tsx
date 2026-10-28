@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import AdvanceForm from "@/components/AdvanceForm";
+import { getAdvancesLocal, getFarmersLocal, saveFarmersLocal } from "@/lib/indexed-db";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 
 interface AdvanceData {
   _id: string;
@@ -19,26 +21,48 @@ export default function AdvancesPage() {
   const [advances, setAdvances] = useState<AdvanceData[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadAdvances = () => {
-    fetch("/api/advances")
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setAdvances(data);
-      })
-      .finally(() => setLoading(false));
+  const loadAdvances = async () => {
+    try {
+      const local = await getAdvancesLocal() as unknown as AdvanceData[];
+      setAdvances(local);
+      const response = await fetchWithTimeout("/api/advances", {}, 8000);
+      if (!response.ok) throw new Error("Could not load advances");
+      const remote = await response.json() as AdvanceData[];
+      if (!Array.isArray(remote)) return;
+      const byId = new Map<string, AdvanceData>();
+      for (const advance of [...remote, ...local]) {
+        byId.set(advance._id || (advance as AdvanceData & { id?: string }).id || `${advance.farmerId}_${advance.dateAD}_${advance.amount}`, advance);
+      }
+      setAdvances([...byId.values()]);
+    } catch {
+      // Keep locally saved advances visible when offline or the server is unavailable.
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const loadFarmers = () => {
-    fetch("/api/farmers")
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setFarmers(data);
-      });
+  const loadFarmers = async () => {
+    try {
+      const local = await getFarmersLocal() as unknown as Array<{ _id: string; name: string; code: string }>;
+      if (local.length) setFarmers(local);
+      const response = await fetchWithTimeout("/api/farmers", {}, 8000);
+      if (!response.ok) throw new Error("Could not load farmers");
+      const remote = await response.json();
+      if (Array.isArray(remote)) {
+        setFarmers(remote);
+        await saveFarmersLocal(remote);
+      }
+    } catch {
+      // Cached farmers keep the advance form usable without a connection.
+    }
   };
 
   useEffect(() => {
-    loadFarmers();
-    loadAdvances();
+    const timer = window.setTimeout(() => {
+      void loadFarmers();
+      void loadAdvances();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const farmerMap = new Map(farmers.map((f) => [f._id, `${f.name} (${f.code})`]));
