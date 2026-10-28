@@ -1,5 +1,6 @@
 import { getPayments, getFarmers } from "@/lib/db";
 import PaymentsClient from "@/components/PaymentsClient";
+import CalculatePaymentsButton from "@/components/CalculatePaymentsButton";
 
 export const dynamic = "force-dynamic";
 
@@ -24,15 +25,7 @@ export default async function PaymentsPage() {
               </p>
             )}
           </div>
-          <form action="/api/payments" method="POST">
-            <input type="hidden" name="month" value={currentMonth} />
-            <button
-              type="submit"
-              className="px-3.5 py-2 rounded-xl bg-gray-900 text-white font-semibold text-[13px] shadow-sm active:opacity-80 transition-opacity"
-            >
-              Calculate
-            </button>
-          </form>
+          <CalculatePaymentsButton month={currentMonth} />
         </div>
 
         {payments.length === 0 ? (
