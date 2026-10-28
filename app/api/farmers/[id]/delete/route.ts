@@ -10,7 +10,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Farmer not found" }, { status: 404 });
     }
     return NextResponse.json({ success: true });
-  } catch (_error) {
+  } catch {
     return NextResponse.json({ error: "Failed to delete farmer" }, { status: 500 });
   }
 }
