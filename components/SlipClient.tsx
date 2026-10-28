@@ -29,6 +29,46 @@ interface FarmerData {
   phone?: string;
 }
 
+function oklchToRgb(match: string): string {
+  const values = match.match(/oklch\(\s*([\d.]+%?)\s+([\d.]+%?)\s+([\d.]+)(?:deg)?(?:\s*\/\s*([\d.]+%?))?\s*\)/i);
+  if (!values) return match;
+  const parse = (value: string, percentScale: number) => value.endsWith("%")
+    ? Number.parseFloat(value) / 100 * percentScale
+    : Number.parseFloat(value);
+  const L = parse(values[1], 1);
+  const C = parse(values[2], 0.4);
+  const h = Number.parseFloat(values[3]) * Math.PI / 180;
+  const a = Math.cos(h) * C;
+  const b = Math.sin(h) * C;
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  const linearToSrgb = (value: number) => {
+    const channel = value <= 0.0031308 ? 12.92 * value : 1.055 * Math.max(0, value) ** (1 / 2.4) - 0.055;
+    return Math.round(Math.max(0, Math.min(1, channel)) * 255);
+  };
+  const red = linearToSrgb(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s);
+  const green = linearToSrgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s);
+  const blue = linearToSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s);
+  const alpha = values[4] ? parse(values[4], 1) : 1;
+  return alpha < 1 ? `rgba(${red}, ${green}, ${blue}, ${alpha})` : `rgb(${red}, ${green}, ${blue})`;
+}
+
+function normalizeCaptureColors(document: Document, root: HTMLElement) {
+  const elements = [root, ...root.querySelectorAll<HTMLElement>("*")];
+  for (const element of elements) {
+    const computed = document.defaultView?.getComputedStyle(element);
+    if (!computed) continue;
+    for (let index = 0; index < computed.length; index += 1) {
+      const property = computed.item(index);
+      const value = computed.getPropertyValue(property);
+      if (value.includes("oklch(")) {
+        element.style.setProperty(property, value.replace(/oklch\([^)]*\)/gi, oklchToRgb));
+      }
+    }
+  }
+}
+
 function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
   const searchParams = useSearchParams();
   const farmerId = searchParams.get("farmerId") || initialFarmerId || "";
@@ -37,6 +77,7 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
   const [entries, setEntries] = useState<EntryData[]>([]);
   const [period, setPeriod] = useState<Period>({ type: "thisMonth" });
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const slipRef = useRef<HTMLDivElement>(null);
 
@@ -142,54 +183,79 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
   const slipRefNum = `SLP-${selected?.code || "FARM"}-${dailyRows.length}-${Math.round(totalAmount * 100)}`;
 
   const handlePrint = () => {
+    const cleanup = () => document.body.classList.remove("printing-slip");
+    document.body.classList.add("printing-slip");
+    window.addEventListener("afterprint", cleanup, { once: true });
     window.print();
+    window.setTimeout(cleanup, 60000);
+  };
+
+  const captureSlip = async () => {
+    const element = slipRef.current;
+    if (!element) throw new Error("Slip is not ready");
+    await document.fonts?.ready;
+    const html2canvas = (await import("html2canvas")).default;
+    return html2canvas(element, {
+      scale: Math.min(3, Math.max(2, window.devicePixelRatio || 1)),
+      backgroundColor: "#ffffff",
+      useCORS: true,
+      logging: false,
+      onclone: (clonedDocument) => {
+        const clonedSlip = clonedDocument.querySelector<HTMLElement>("[data-slip-capture='true']");
+        if (clonedSlip) normalizeCaptureColors(clonedDocument, clonedSlip);
+      },
+    });
+  };
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = filename;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
   };
 
   const handleDownloadPDF = async () => {
-    if (!slipRef.current) return;
-    // Dynamic import of html2canvas
+    if (!slipRef.current || exporting) return;
+    setExporting(true);
     try {
-      const html2canvas = (await import("html2canvas")).default;
-      const canvas = await html2canvas(slipRef.current, {
-        scale: 3,
-        backgroundColor: "#ffffff",
-        useCORS: true,
-        logging: false,
-        width: 360,
-      });
-      const imgData = canvas.toDataURL("image/png");
+      const canvas = await captureSlip();
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
       const { jsPDF } = await import("jspdf");
+      const heightMm = (canvas.height / canvas.width) * 80;
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "mm",
-        format: [80, (canvas.height / canvas.width) * 80],
+        format: [80, heightMm],
       });
-      pdf.addImage(imgData, "PNG", 0, 0, 80, (canvas.height / canvas.width) * 80);
-      pdf.save(`slip_${selected?.code || "farmer"}_${new Date().toISOString().slice(0, 10)}.pdf`);
+      pdf.addImage(imgData, "JPEG", 0, 0, 80, heightMm);
+      downloadBlob(pdf.output("blob"), `slip_${selected?.code || "farmer"}_${new Date().toISOString().slice(0, 10)}.pdf`);
       showToast("PDF डाउनलोड भयो ✓");
     } catch {
       showToast("PDF डाउनलोड असफल — Print प्रयोग गर्नुहोस्");
+    } finally {
+      setExporting(false);
     }
   };
 
   const handleDownloadJPG = async () => {
-    if (!slipRef.current) return;
+    if (!slipRef.current || exporting) return;
+    setExporting(true);
     try {
-      const html2canvas = (await import("html2canvas")).default;
-      const canvas = await html2canvas(slipRef.current, {
-        scale: 3,
-        backgroundColor: "#ffffff",
-        useCORS: true,
-        logging: false,
-        width: 360,
+      const canvas = await captureSlip();
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((result) => result ? resolve(result) : reject(new Error("Could not create JPG")), "image/jpeg", 0.95);
       });
-      const link = document.createElement("a");
-      link.download = `slip_${selected?.code || "farmer"}_${new Date().toISOString().slice(0, 10)}.jpg`;
-      link.href = canvas.toDataURL("image/jpeg", 0.95);
-      link.click();
+      downloadBlob(blob, `slip_${selected?.code || "farmer"}_${new Date().toISOString().slice(0, 10)}.jpg`);
       showToast("JPG डाउनलोड भयो ✓");
     } catch {
       showToast("JPG डाउनलोड असफल — Print प्रयोग गर्नुहोस्");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -197,7 +263,7 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
     period.type === "custom" && period.from && period.to
       ? `${period.from} ~ ${period.to}`
       : period.type === "thisMonth"
-        ? "This Month"
+        ? new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(new Date())
         : period.type === "twoMonths"
           ? "Last 2 Months"
           : period.type === "thisYear"
@@ -249,6 +315,7 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
             <div className="flex justify-center">
               <div
                 ref={slipRef}
+                data-slip-capture="true"
                 className="slip-container bg-white border-2 border-gray-800 rounded-xl p-4 shadow-sm"
               >
                 {/* Header */}
@@ -340,6 +407,7 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
             <div className="space-y-2 no-print">
               <button
                 onClick={handlePrint}
+                disabled={exporting}
                 className="w-full py-3.5 rounded-xl bg-gray-900 text-white font-bold text-[15px] shadow-sm active:opacity-80 transition-opacity"
               >
                 Print slip
@@ -347,15 +415,17 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={handleDownloadPDF}
-                  className="w-full py-3 rounded-xl bg-white shadow-sm text-gray-900 font-semibold text-[13.5px] ring-1 ring-inset ring-gray-200 active:opacity-80 transition-opacity"
+                  disabled={exporting}
+                  className="w-full py-3 rounded-xl bg-white shadow-sm text-gray-900 font-semibold text-[13.5px] ring-1 ring-inset ring-gray-200 active:opacity-80 transition-opacity disabled:opacity-50"
                 >
-                  Download PDF
+                  {exporting ? "Preparing…" : "Download PDF"}
                 </button>
                 <button
                   onClick={handleDownloadJPG}
-                  className="w-full py-3 rounded-xl bg-white shadow-sm text-gray-900 font-semibold text-[13.5px] ring-1 ring-inset ring-gray-200 active:opacity-80 transition-opacity"
+                  disabled={exporting}
+                  className="w-full py-3 rounded-xl bg-white shadow-sm text-gray-900 font-semibold text-[13.5px] ring-1 ring-inset ring-gray-200 active:opacity-80 transition-opacity disabled:opacity-50"
                 >
-                  Download image
+                  {exporting ? "Preparing…" : "Download JPG"}
                 </button>
               </div>
             </div>

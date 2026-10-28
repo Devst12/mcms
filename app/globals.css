@@ -169,11 +169,50 @@ body {
 }
 
 @media print {
+  @page {
+    margin: 5mm;
+    size: auto;
+  }
+
   .slip-container {
     max-width: 80mm;
-    padding: 0;
+    padding: 4mm;
     margin: 0;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
+
+  body.printing-slip * {
+    visibility: hidden !important;
+  }
+
+  body.printing-slip {
+    display: block !important;
+    padding: 0 !important;
+  }
+
+  body.printing-slip main {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  body.printing-slip [data-slip-capture="true"],
+  body.printing-slip [data-slip-capture="true"] * {
+    visibility: visible !important;
+  }
+
+  body.printing-slip [data-slip-capture="true"] {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
   .no-print {
     display: none !important;
   }
