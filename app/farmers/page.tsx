@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { UserPlus } from "lucide-react";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { getFarmersLocal, saveFarmersLocal } from "@/lib/indexed-db";
 
 interface FarmerData {
   _id: string;
@@ -27,12 +29,31 @@ export default function FarmersList() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/farmers")
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setFarmers(data);
-      })
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const local = await getFarmersLocal() as unknown as FarmerData[];
+          if (!cancelled && local.length) setFarmers(local);
+          const response = await fetchWithTimeout("/api/farmers", {}, 8000);
+          if (!response.ok) throw new Error("Could not load farmers");
+          const remote = await response.json();
+          if (Array.isArray(remote)) {
+            await saveFarmersLocal(remote);
+            const latest = await getFarmersLocal() as unknown as FarmerData[];
+            if (!cancelled) setFarmers(latest);
+          }
+        } catch {
+          // Cached farmers remain available when offline.
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      })();
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, []);
 
   const filtered = farmers.filter(
