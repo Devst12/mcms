@@ -68,9 +68,10 @@ export default function Navbar() {
     const updatePendingCount = async () => {
       try {
         const entries = await getUnsyncedItems("entries");
+        const farmers = await getUnsyncedItems("farmers");
         const companies = await getUnsyncedItems("company_collections");
         const advances = await getUnsyncedItems("advances");
-        if (!cancelled) setPendingSync(entries.length + companies.length + advances.length);
+        if (!cancelled) setPendingSync(entries.length + farmers.length + companies.length + advances.length);
       } catch {
         // ignore
       }
@@ -100,11 +101,13 @@ export default function Navbar() {
     setSyncing(true);
     try {
       const entries = await getUnsyncedItems("entries");
+      const farmers = await getUnsyncedItems("farmers");
       const companies = await getUnsyncedItems("company_collections");
       const advances = await getUnsyncedItems("advances");
 
       const items = [
         ...entries.map((e: Record<string, unknown>) => ({ id: (e as { id?: string }).id, collection: "entries" as const, data: e })),
+        ...farmers.map((f: Record<string, unknown>) => ({ id: (f as { id?: string }).id, collection: "farmers" as const, data: f })),
         ...companies.map((c: Record<string, unknown>) => ({ id: (c as { id?: string }).id, collection: "company_collections" as const, data: c })),
         ...advances.map((a: Record<string, unknown>) => ({ id: (a as { id?: string }).id, collection: "advances" as const, data: a })),
       ];
@@ -122,10 +125,10 @@ export default function Navbar() {
 
       if (res.ok) {
         const result = await res.json();
-        const successful = new Map<string, { serverId?: string }>(
+        const successful = new Map<string, { serverId?: string; serverFields?: Record<string, unknown> }>(
           (result.results || [])
             .filter((r: { success: boolean }) => r.success)
-            .map((r: { id: string; serverId?: string }) => [r.id, { serverId: r.serverId }])
+            .map((r: { id: string; serverId?: string; serverFields?: Record<string, unknown> }) => [r.id, { serverId: r.serverId, serverFields: r.serverFields }])
         );
         for (const item of items) {
           const result = item.id ? successful.get(item.id) : undefined;
@@ -133,16 +136,20 @@ export default function Navbar() {
             await markSynced(
               item.collection,
               item.id,
-              item.collection === "entries" && result.serverId ? { _id: result.serverId } : {}
+              {
+                ...(item.collection === "entries" && result.serverId ? { _id: result.serverId } : {}),
+                ...(result.serverFields || {}),
+              }
             );
           }
         }
-        const [remainingEntries, remainingCompanies, remainingAdvances] = await Promise.all([
+        const [remainingEntries, remainingFarmers, remainingCompanies, remainingAdvances] = await Promise.all([
           getUnsyncedItems("entries"),
+          getUnsyncedItems("farmers"),
           getUnsyncedItems("company_collections"),
           getUnsyncedItems("advances"),
         ]);
-        setPendingSync(remainingEntries.length + remainingCompanies.length + remainingAdvances.length);
+        setPendingSync(remainingEntries.length + remainingFarmers.length + remainingCompanies.length + remainingAdvances.length);
       }
     } catch (err) {
       console.error("Sync failed", err);
