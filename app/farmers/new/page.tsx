@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { queueForSync, saveFarmersLocal } from "@/lib/indexed-db";
 
 export default function NewFarmer() {
   const router = useRouter();
@@ -11,18 +12,32 @@ export default function NewFarmer() {
   const [address, setAddress] = useState("");
   const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name.trim() || saving) return;
     setSaving(true);
+    setError("");
     try {
-      await fetch("/api/farmers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, address, active }),
-      });
+      const id = `farmer_${crypto.randomUUID?.() || Date.now()}`;
+      const farmer = {
+        id,
+        _id: id,
+        code: "Pending sync",
+        name: name.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
+        active,
+        synced: false,
+        createdAt: new Date().toISOString(),
+      };
+      await saveFarmersLocal([farmer]);
+      await queueForSync({ id, collection: "farmers", data: farmer, timestamp: Date.now() });
+      window.dispatchEvent(new Event("local-data-saved"));
       router.push("/farmers");
-    } finally {
+    } catch {
+      setError("Could not save this farmer on this device. Please try again.");
       setSaving(false);
     }
   };
@@ -39,6 +54,7 @@ export default function NewFarmer() {
         </div>
 
         <form onSubmit={handleSubmit} className="rounded-2xl bg-white shadow-sm px-4 py-4 space-y-4">
+          {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
           <div>
             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
               Name <span className="text-red-500">*</span>
