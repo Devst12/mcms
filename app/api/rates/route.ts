@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     const slabs = await getRateSlabs(milkType || undefined);
     return NextResponse.json(slabs);
-  } catch (_error) {
+  } catch {
     return NextResponse.json({ error: "Failed to fetch rate slabs" }, { status: 500 });
   }
 }
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(slab, { status: 201 });
-  } catch (_error) {
+  } catch {
     return NextResponse.json({ error: "Failed to create rate slab" }, { status: 500 });
   }
 }
