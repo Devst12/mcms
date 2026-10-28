@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { calculatePayment, getAdvances, getEntries } from "@/lib/db";
+import { calculatePayment } from "@/lib/db";
 import { ObjectId } from "mongodb";
 
 export async function POST(request: NextRequest) {
@@ -65,7 +65,6 @@ export async function POST(request: NextRequest) {
         milkAmount: result.milkAmount,
         advancesDeducted: result.advancesDeducted,
         finalAmount: result.finalAmount,
-        paid: false,
       };
 
       if (existing) {
@@ -78,6 +77,7 @@ export async function POST(request: NextRequest) {
         const payment = {
           _id: new ObjectId().toHexString(),
           ...paymentData,
+          paid: false,
         };
         await db.collection("payments").insertOne(payment as any); // eslint-disable-line @typescript-eslint/no-explicit-any
         results.push(payment);
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(results, { status: 201 });
-  } catch (_error) {
+  } catch {
     return NextResponse.json({ error: "Failed to generate payments" }, { status: 500 });
   }
 }
