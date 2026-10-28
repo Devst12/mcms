@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import { Fragment, useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Pencil, Trash2, Check, X } from "lucide-react";
 import PeriodPicker, { type Period } from "@/components/PeriodPicker";
@@ -17,6 +17,13 @@ interface EntryData {
   eveningQty: number;
   fatPercent: number;
   rateUsed: number;
+}
+
+interface FarmerDayGroup {
+  farmerId: string;
+  farmerName: string;
+  cow: EntryData[];
+  buffalo: EntryData[];
 }
 
 const MILK_ACCENT = {
@@ -157,16 +164,21 @@ function EntriesInner() {
   const grandTotal = entries.reduce((s, e) => s + (e.morningQty + e.eveningQty) * e.rateUsed, 0);
 
   const grouped = entriesWithNames.reduce((acc, e) => {
-    if (!acc[e.dateBS]) acc[e.dateBS] = [];
-    acc[e.dateBS].push(e);
+    const day = acc[e.dateBS] || (acc[e.dateBS] = []);
+    let farmer = day.find((group) => group.farmerId === e.farmerId);
+    if (!farmer) {
+      farmer = { farmerId: e.farmerId, farmerName: e.farmerName || e.farmerId, cow: [], buffalo: [] };
+      day.push(farmer);
+    }
+    farmer[e.milkType].push(e);
     return acc;
-  }, {} as Record<string, EntryData[]>);
+  }, {} as Record<string, FarmerDayGroup[]>);
 
   const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-3xl mx-auto px-4 py-5 space-y-4 pb-10">
+      <div className="max-w-7xl mx-auto px-4 py-5 space-y-4 pb-10">
         {/* Header */}
         <h1 className="text-[22px] font-bold text-gray-900 tracking-tight">History</h1>
 
@@ -211,257 +223,127 @@ function EntriesInner() {
         {/* Entries grouped by date */}
         {!loading &&
           sortedDates.map((date) => {
-            const dayEntries = grouped[date];
+            const dayGroups = grouped[date];
+            const dayEntries = entriesWithNames.filter((entry) => entry.dateBS === date);
             return (
               <div key={date} className="rounded-2xl bg-white shadow-sm overflow-hidden">
                 <div className="px-4 pt-4 pb-1">
                   <h3 className="text-[13px] font-bold text-gray-900">{date}</h3>
                 </div>
 
-                {/* Mobile: flat list rows */}
-                <div className="md:hidden px-2 pb-2">
-                  {dayEntries.map((e) => {
-                    const accent = MILK_ACCENT[e.milkType];
-                    const isEditing = editingId === e._id;
-                    return (
-                      <div key={e._id} className="border-t border-gray-50 first:border-t-0 px-2 py-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0 flex items-center gap-2">
-                            <span
-                              className={`shrink-0 w-6 h-6 rounded-full ${accent.bg} flex items-center justify-center text-[11px]`}
-                            >
-                              {e.milkType === "cow" ? "🐄" : "🐃"}
-                            </span>
-                            <p className="text-[13.5px] font-bold text-gray-900 truncate">
-                              {e.farmerName || e.farmerId}
-                            </p>
-                          </div>
-                          {!isEditing && (
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                onClick={() => startEdit(e)}
-                                className="w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-colors"
-                                aria-label="Edit"
-                              >
-                                <Pencil size={14} />
-                              </button>
-                              <button
-                                onClick={() => setDeleteId(e._id)}
-                                className="w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                                aria-label="Delete"
-                              >
-                                <Trash2 size={14} />
-                              </button>
+                {/* One farmer card with Cow and Buffalo side by side on phones */}
+                <div className="md:hidden px-3 pb-3 space-y-2">
+                  {dayGroups.map((group) => {
+                    const allEntries = [...group.cow, ...group.buffalo];
+                    const sum = (list: EntryData[], field: "morningQty" | "eveningQty") =>
+                      list.reduce((total, entry) => total + entry[field], 0);
+                    const renderManage = () => (
+                      <details className="mt-2 border-t border-gray-100 pt-2" open={allEntries.some((entry) => entry._id === editingId)}>
+                        <summary className="cursor-pointer py-1 text-[11px] font-semibold text-gray-500">Manage entries ({allEntries.length})</summary>
+                        <div className="space-y-2 pt-2">
+                          {allEntries.map((entry) => (
+                            <div key={entry._id} className="rounded-lg bg-gray-50 p-2.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`text-xs font-semibold ${MILK_ACCENT[entry.milkType].text}`}>
+                                  {entry.milkType === "cow" ? "Cow" : "Buffalo"} · {entry.morningQty > 0 && entry.eveningQty > 0 ? "AM + PM" : entry.eveningQty > 0 ? "PM" : "AM"}
+                                </span>
+                                <div className="flex gap-1">
+                                  <button onClick={() => startEdit(entry)} className="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:bg-white" aria-label="Edit entry"><Pencil size={14} /></button>
+                                  <button onClick={() => setDeleteId(entry._id)} className="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:bg-red-50 hover:text-red-600" aria-label="Delete entry"><Trash2 size={14} /></button>
+                                </div>
+                              </div>
+                              {editingId === entry._id && (
+                                <div className="mt-2 space-y-2">
+                                  <div className="grid grid-cols-3 gap-2">
+                                    <label className="text-[10px] text-gray-500">AM<input type="number" step="0.1" value={editForm.morning} onChange={(event) => setEditForm({ ...editForm, morning: event.target.value })} className="mt-1 w-full rounded-md bg-white p-2 text-center text-sm" /></label>
+                                    <label className="text-[10px] text-gray-500">PM<input type="number" step="0.1" value={editForm.evening} onChange={(event) => setEditForm({ ...editForm, evening: event.target.value })} className="mt-1 w-full rounded-md bg-white p-2 text-center text-sm" /></label>
+                                    <label className="text-[10px] text-gray-500">Fat %<input type="number" step="0.1" value={editForm.fat} onChange={(event) => setEditForm({ ...editForm, fat: event.target.value })} className="mt-1 w-full rounded-md bg-white p-2 text-center text-sm" /></label>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button onClick={() => saveEdit(entry)} className="flex-1 rounded-lg bg-gray-900 py-2 text-xs font-semibold text-white">Save</button>
+                                    <button onClick={cancelEdit} className="flex-1 rounded-lg bg-white py-2 text-xs font-semibold text-gray-600">Cancel</button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                          )}
+                          ))}
                         </div>
-
-                        {!isEditing ? (
-                          <div className="flex items-center justify-between mt-2 pl-8">
-                            <div className="flex items-center gap-3 text-[12px] text-gray-500">
-                              <span className="tabular-nums">☀️ {e.morningQty.toFixed(1)}L</span>
-                              <span className="tabular-nums">🌙 {e.eveningQty.toFixed(1)}L</span>
-                              <span className="tabular-nums">{e.fatPercent.toFixed(1)}% fat</span>
-                            </div>
-                            <p className={`text-[13px] font-bold tabular-nums ${accent.text}`}>
-                              Rs {((e.morningQty + e.eveningQty) * e.rateUsed).toFixed(2)}
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="mt-2.5 pl-1 space-y-2">
-                            <div className="grid grid-cols-3 gap-2">
-                              <div>
-                                <label className="text-[10px] font-medium text-gray-400">Morning</label>
-                                <input
-                                  type="number"
-                                  step="0.1"
-                                  inputMode="decimal"
-                                  value={editForm.morning}
-                                  onChange={(ev) => setEditForm({ ...editForm, morning: ev.target.value })}
-                                  className="w-full mt-0.5 px-2 py-2 rounded-lg bg-gray-50 text-[13px] font-semibold text-center tabular-nums outline-none ring-1 ring-inset ring-gray-200 focus:ring-2 focus:ring-gray-400"
-                                />
+                      </details>
+                    );
+                    return (
+                      <div key={group.farmerId} className="rounded-xl border border-gray-100 bg-white px-3 py-3">
+                        <p className="mb-2 text-[13px] font-bold text-gray-900">{group.farmerName}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {(["cow", "buffalo"] as const).map((type) => {
+                            const list = group[type];
+                            const total = sum(list, "morningQty") + sum(list, "eveningQty");
+                            return (
+                              <div key={type} className={`rounded-lg ${MILK_ACCENT[type].bg} px-2.5 py-2`}>
+                                <p className={`text-[11px] font-bold ${MILK_ACCENT[type].text}`}>{type === "cow" ? "Cow" : "Buffalo"}</p>
+                                <p className="mt-1 text-[11px] text-gray-600">AM {sum(list, "morningQty").toFixed(1)} · PM {sum(list, "eveningQty").toFixed(1)}</p>
+                                <p className="text-[12px] font-bold text-gray-900">{total.toFixed(1)} L</p>
                               </div>
-                              <div>
-                                <label className="text-[10px] font-medium text-gray-400">Evening</label>
-                                <input
-                                  type="number"
-                                  step="0.1"
-                                  inputMode="decimal"
-                                  value={editForm.evening}
-                                  onChange={(ev) => setEditForm({ ...editForm, evening: ev.target.value })}
-                                  className="w-full mt-0.5 px-2 py-2 rounded-lg bg-gray-50 text-[13px] font-semibold text-center tabular-nums outline-none ring-1 ring-inset ring-gray-200 focus:ring-2 focus:ring-gray-400"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-[10px] font-medium text-gray-400">Fat %</label>
-                                <input
-                                  type="number"
-                                  step="0.1"
-                                  inputMode="decimal"
-                                  value={editForm.fat}
-                                  onChange={(ev) => setEditForm({ ...editForm, fat: ev.target.value })}
-                                  className="w-full mt-0.5 px-2 py-2 rounded-lg bg-gray-50 text-[13px] font-semibold text-center tabular-nums outline-none ring-1 ring-inset ring-gray-200 focus:ring-2 focus:ring-gray-400"
-                                />
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => saveEdit(e)}
-                                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-gray-900 text-white text-[12.5px] font-semibold"
-                              >
-                                <Check size={14} /> Save
-                              </button>
-                              <button
-                                onClick={cancelEdit}
-                                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-gray-100 text-gray-600 text-[12.5px] font-semibold"
-                              >
-                                <X size={14} /> Cancel
-                              </button>
-                            </div>
-                          </div>
-                        )}
+                            );
+                          })}
+                        </div>
+                        {renderManage()}
                       </div>
                     );
                   })}
                 </div>
 
-                {/* Desktop: table */}
-                <div className="hidden md:block overflow-x-auto px-2 pb-2">
-                  <table className="w-full text-left text-[13px]">
+                {/* Grouped table: one row per farmer, with Cow and Buffalo separate */}
+                <div className="hidden md:block overflow-x-auto px-2 pb-3">
+                  <table className="w-full min-w-[900px] text-left text-[13px]">
                     <thead>
-                      <tr className="text-gray-400 text-[10.5px] uppercase tracking-wide">
-                        <th className="py-2 px-2 font-medium">Farmer</th>
-                        <th className="py-2 px-2 font-medium">Type</th>
-                        <th className="py-2 px-2 text-right font-medium">Morning</th>
-                        <th className="py-2 px-2 text-right font-medium">Evening</th>
-                        <th className="py-2 px-2 text-right font-medium">Total</th>
-                        <th className="py-2 px-2 text-right font-medium">Fat %</th>
-                        <th className="py-2 px-2 text-right font-medium">Rate</th>
-                        <th className="py-2 px-2 text-right font-medium">Amount</th>
-                        <th className="py-2 px-2 text-right font-medium">Actions</th>
+                      <tr className="text-[10.5px] uppercase tracking-wide text-gray-400">
+                        <th rowSpan={2} className="px-2 py-2 font-medium">Farmer</th>
+                        <th colSpan={3} className="px-2 py-2 text-center font-semibold text-amber-700">Cow · Liters</th>
+                        <th colSpan={3} className="px-2 py-2 text-center font-semibold text-teal-700">Buffalo · Liters</th>
+                        <th rowSpan={2} className="px-2 py-2 text-right font-medium">Amount</th>
+                        <th rowSpan={2} className="px-2 py-2 font-medium">Manage</th>
+                      </tr>
+                      <tr className="text-[10px] uppercase tracking-wide text-gray-400">
+                        {Array.from({ length: 2 }).flatMap((_, index) => <Fragment key={index}><th className="px-2 pb-2 text-right font-medium">AM</th><th className="px-2 pb-2 text-right font-medium">PM</th><th className="px-2 pb-2 text-right font-medium">Total</th></Fragment>)}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {dayEntries.map((e) => {
-                        const accent = MILK_ACCENT[e.milkType];
-                        const isEditing = editingId === e._id;
+                      {dayGroups.map((group) => {
+                        const sum = (list: EntryData[], field: "morningQty" | "eveningQty") => list.reduce((total, entry) => total + entry[field], 0);
+                        const amount = [...group.cow, ...group.buffalo].reduce((total, entry) => total + (entry.morningQty + entry.eveningQty) * entry.rateUsed, 0);
+                        const allEntries = [...group.cow, ...group.buffalo];
                         return (
-                          <tr key={e._id} className="text-gray-700">
-                            {isEditing ? (
-                              <>
-                                <td className="py-2 px-2 font-semibold text-gray-900">
-                                  {e.farmerName || e.farmerId}
-                                </td>
-                                <td className="py-2 px-2">{e.milkType === "cow" ? "🐄" : "🐃"}</td>
-                                <td className="py-2 px-2 text-right">
-                                  <input
-                                    type="number"
-                                    step="0.1"
-                                    value={editForm.morning}
-                                    onChange={(ev) => setEditForm({ ...editForm, morning: ev.target.value })}
-                                    className="w-16 px-2 py-1 rounded-md bg-gray-50 text-right outline-none ring-1 ring-inset ring-gray-200 focus:ring-2 focus:ring-gray-400"
-                                  />
-                                </td>
-                                <td className="py-2 px-2 text-right">
-                                  <input
-                                    type="number"
-                                    step="0.1"
-                                    value={editForm.evening}
-                                    onChange={(ev) => setEditForm({ ...editForm, evening: ev.target.value })}
-                                    className="w-16 px-2 py-1 rounded-md bg-gray-50 text-right outline-none ring-1 ring-inset ring-gray-200 focus:ring-2 focus:ring-gray-400"
-                                  />
-                                </td>
-                                <td className="py-2 px-2 text-right font-semibold tabular-nums">
-                                  {((parseFloat(editForm.morning) || 0) + (parseFloat(editForm.evening) || 0)).toFixed(1)}
-                                </td>
-                                <td className="py-2 px-2 text-right">
-                                  <input
-                                    type="number"
-                                    step="0.1"
-                                    value={editForm.fat}
-                                    onChange={(ev) => setEditForm({ ...editForm, fat: ev.target.value })}
-                                    className="w-14 px-2 py-1 rounded-md bg-gray-50 text-right outline-none ring-1 ring-inset ring-gray-200 focus:ring-2 focus:ring-gray-400"
-                                  />
-                                </td>
-                                <td className="py-2 px-2 text-right tabular-nums text-gray-400">
-                                  {e.rateUsed.toFixed(2)}
-                                </td>
-                                <td className="py-2 px-2 text-right font-bold tabular-nums">
-                                  Rs{" "}
-                                  {(
-                                    ((parseFloat(editForm.morning) || 0) + (parseFloat(editForm.evening) || 0)) *
-                                    e.rateUsed
-                                  ).toFixed(2)}
-                                </td>
-                                <td className="py-2 px-2">
-                                  <div className="flex gap-1 justify-end">
-                                    <button
-                                      onClick={() => saveEdit(e)}
-                                      className="px-2.5 py-1 rounded-md bg-gray-900 text-white text-[11px] font-semibold"
-                                    >
-                                      Save
-                                    </button>
-                                    <button
-                                      onClick={cancelEdit}
-                                      className="px-2.5 py-1 rounded-md bg-gray-100 text-gray-600 text-[11px] font-semibold"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </td>
-                              </>
-                            ) : (
-                              <>
-                                <td className="py-2 px-2 font-semibold text-gray-900">
-                                  {e.farmerName || e.farmerId}
-                                </td>
-                                <td className="py-2 px-2">
-                                  <span
-                                    className={`inline-flex items-center rounded-full ${accent.bg} ${accent.text} px-2 py-0.5 text-[11px] font-semibold`}
-                                  >
-                                    {e.milkType === "cow" ? "🐄 Cow" : "🐃 Buffalo"}
-                                  </span>
-                                </td>
-                                <td className="py-2 px-2 text-right tabular-nums">{e.morningQty.toFixed(1)}</td>
-                                <td className="py-2 px-2 text-right tabular-nums">{e.eveningQty.toFixed(1)}</td>
-                                <td className="py-2 px-2 text-right font-semibold tabular-nums">
-                                  {(e.morningQty + e.eveningQty).toFixed(1)}
-                                </td>
-                                <td className="py-2 px-2 text-right tabular-nums text-gray-500">
-                                  {e.fatPercent.toFixed(1)}%
-                                </td>
-                                <td className="py-2 px-2 text-right tabular-nums text-gray-400">
-                                  {e.rateUsed.toFixed(2)}
-                                </td>
-                                <td className={`py-2 px-2 text-right font-bold tabular-nums ${accent.text}`}>
-                                  Rs {((e.morningQty + e.eveningQty) * e.rateUsed).toFixed(2)}
-                                </td>
-                                <td className="py-2 px-2">
-                                  <div className="flex gap-1 justify-end">
-                                    <button
-                                      onClick={() => startEdit(e)}
-                                      className="w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition-colors"
-                                      aria-label="Edit"
-                                    >
-                                      <Pencil size={14} />
-                                    </button>
-                                    <button
-                                      onClick={() => setDeleteId(e._id)}
-                                      className="w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                                      aria-label="Delete"
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </div>
-                                </td>
-                              </>
-                            )}
+                          <tr key={group.farmerId} className="text-gray-700">
+                            <td className="px-2 py-3 font-semibold text-gray-900">{group.farmerName}</td>
+                            {([group.cow, group.buffalo] as EntryData[][]).map((list, index) => {
+                              const type = index === 0 ? "cow" : "buffalo";
+                              const total = sum(list, "morningQty") + sum(list, "eveningQty");
+                              return <Fragment key={type}><td className={`px-2 py-3 text-right tabular-nums ${MILK_ACCENT[type].text}`}>{sum(list, "morningQty").toFixed(1)}</td><td className={`px-2 py-3 text-right tabular-nums ${MILK_ACCENT[type].text}`}>{sum(list, "eveningQty").toFixed(1)}</td><td className="px-2 py-3 text-right font-semibold tabular-nums">{total.toFixed(1)}</td></Fragment>;
+                            })}
+                            <td className="px-2 py-3 text-right font-bold tabular-nums">Rs {amount.toFixed(2)}</td>
+                            <td className="px-2 py-3">
+                              <details open={allEntries.some((entry) => entry._id === editingId)}>
+                                <summary className="cursor-pointer text-xs font-semibold text-gray-500">{allEntries.length} records</summary>
+                                <div className="absolute z-10 mt-1 max-h-72 w-80 overflow-auto rounded-xl border border-gray-100 bg-white p-2 shadow-xl">
+                                  {allEntries.map((entry) => (
+                                    <div key={entry._id} className="border-b border-gray-100 p-2 last:border-0">
+                                      <div className="flex items-center justify-between text-xs">
+                                        <span className={`font-semibold ${MILK_ACCENT[entry.milkType].text}`}>{entry.milkType === "cow" ? "Cow" : "Buffalo"} · AM {entry.morningQty.toFixed(1)} · PM {entry.eveningQty.toFixed(1)} · Fat {entry.fatPercent.toFixed(1)}%</span>
+                                        <span className="flex gap-1"><button onClick={() => startEdit(entry)} aria-label="Edit entry" className="p-1 text-gray-500"><Pencil size={13} /></button><button onClick={() => setDeleteId(entry._id)} aria-label="Delete entry" className="p-1 text-gray-500 hover:text-red-600"><Trash2 size={13} /></button></span>
+                                      </div>
+                                      {editingId === entry._id && <div className="mt-2 space-y-2"><div className="grid grid-cols-3 gap-1"><input aria-label="Morning liters" type="number" step="0.1" value={editForm.morning} onChange={(event) => setEditForm({ ...editForm, morning: event.target.value })} className="w-full rounded bg-gray-50 p-1.5 text-xs" /><input aria-label="Evening liters" type="number" step="0.1" value={editForm.evening} onChange={(event) => setEditForm({ ...editForm, evening: event.target.value })} className="w-full rounded bg-gray-50 p-1.5 text-xs" /><input aria-label="Fat percent" type="number" step="0.1" value={editForm.fat} onChange={(event) => setEditForm({ ...editForm, fat: event.target.value })} className="w-full rounded bg-gray-50 p-1.5 text-xs" /></div><div className="flex gap-2"><button onClick={() => saveEdit(entry)} className="flex-1 rounded bg-gray-900 py-1.5 text-xs text-white">Save</button><button onClick={cancelEdit} className="flex-1 rounded bg-gray-100 py-1.5 text-xs">Cancel</button></div></div>}
+                                    </div>
+                                  ))}
+                                </div>
+                              </details>
+                            </td>
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
                 </div>
+
               </div>
             );
           })}
