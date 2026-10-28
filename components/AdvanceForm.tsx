@@ -40,6 +40,7 @@ export default function AdvanceForm({ farmers, onAdvanceAdded }: AdvanceFormProp
       };
       await saveAdvanceLocal(advance);
       await queueForSync({ id: advance.id, collection: "advances", data: advance, timestamp: Date.now() });
+      window.dispatchEvent(new Event("local-data-saved"));
       setAmount("");
       setNote("");
       onAdvanceAdded();
