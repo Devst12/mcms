@@ -2,7 +2,7 @@
 
 import { Fragment, useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Pencil, Trash2, Check, X } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import PeriodPicker, { type Period } from "@/components/PeriodPicker";
 import Modal from "@/components/Modal";
 
@@ -224,7 +224,6 @@ function EntriesInner() {
         {!loading &&
           sortedDates.map((date) => {
             const dayGroups = grouped[date];
-            const dayEntries = entriesWithNames.filter((entry) => entry.dateBS === date);
             return (
               <div key={date} className="rounded-2xl bg-white shadow-sm overflow-hidden">
                 <div className="px-4 pt-4 pb-1">
