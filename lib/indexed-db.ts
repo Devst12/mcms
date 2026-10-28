@@ -75,7 +75,7 @@ export async function saveFarmersLocal(farmers: Record<string, unknown>[]): Prom
   const db = await getDb();
   const tx = db.transaction("farmers", "readwrite");
   await Promise.all([
-    ...farmers.map((farmer) => tx.store.put({ ...farmer, id: farmer._id })),
+    ...farmers.map((farmer) => tx.store.put({ ...farmer, id: farmer._id, synced: farmer.synced ?? true })),
     tx.done,
   ]);
 }
@@ -124,6 +124,11 @@ export async function saveAdvanceLocal(advance: Record<string, unknown>): Promis
   await db.put("advances", advance);
 }
 
+export async function getAdvancesLocal(): Promise<Record<string, unknown>[]> {
+  const db = await getDb();
+  return db.getAll("advances");
+}
+
 export async function queueForSync(item: Record<string, unknown>): Promise<void> {
   const db = await getDb();
   const payload = { ...item, timestamp: item.timestamp ?? Date.now() };
@@ -133,6 +138,7 @@ export async function queueForSync(item: Record<string, unknown>): Promise<void>
 export async function getUnsyncedItems(storeName: string): Promise<Record<string, unknown>[]> {
   const db = await getDb();
   const all = await db.getAll(storeName);
+  if (storeName === "farmers") return all.filter((item: Record<string, unknown>) => item.synced === false);
   return all.filter((item: Record<string, unknown>) => !(item as { synced?: boolean }).synced);
 }
 
