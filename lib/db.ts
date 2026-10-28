@@ -73,6 +73,31 @@ export async function createEntry(data: Omit<Entry, "_id" | "createdAt">): Promi
   return entry;
 }
 
+export async function upsertEntryBySession(data: Omit<Entry, "_id" | "createdAt">): Promise<Entry> {
+  const db = await getDb();
+  const session = data.session || "both";
+  const filter = {
+    dateAD: data.dateAD,
+    farmerId: data.farmerId,
+    milkType: data.milkType,
+    session,
+  };
+  const existing = await db.collection<Entry>("entries").findOne(filter);
+  if (!existing) return createEntry({ ...data, session });
+
+  await db.collection<Entry>("entries").updateOne(
+    { _id: existing._id },
+    { $set: {
+      morningQty: data.morningQty,
+      eveningQty: data.eveningQty,
+      fatPercent: data.fatPercent,
+      rateUsed: data.rateUsed,
+      session,
+    } }
+  );
+  return (await db.collection<Entry>("entries").findOne({ _id: existing._id })) || existing;
+}
+
 export async function updateEntry(id: string, data: Partial<Entry>): Promise<Entry | null> {
   const db = await getDb();
   const result = await db.collection<Entry>("entries").findOneAndUpdate(
