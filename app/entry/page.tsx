@@ -4,7 +4,16 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getTodayBs } from "@/lib/nepali-dates";
-import { saveEntryLocal, queueForSync } from "@/lib/indexed-db";
+import {
+  getEntriesLocal,
+  getFarmersLocal,
+  getRateSlabLocal,
+  markSynced,
+  queueForSync,
+  saveEntryLocal,
+  saveFarmersLocal,
+  saveRateSlabLocal,
+} from "@/lib/indexed-db";
 
 export const dynamic = "force-dynamic";
 
@@ -317,17 +326,45 @@ function DailyEntryInner() {
   const [activeType, setActiveType] = useState<Record<string, MilkTypeKey>>({});
 
   useEffect(() => {
-    fetch("/api/farmers")
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setFarmers(data);
-      });
+    let cancelled = false;
+    const loadFarmers = async () => {
+      try {
+        const local = await getFarmersLocal();
+        if (!cancelled && local.length) {
+          setFarmers(local.map(({ id: _id, ...farmer }) => ({ ...farmer, _id: String(farmer._id || _id) })) as Farmer[]);
+        }
+      } catch {}
+      try {
+        const response = await fetch("/api/farmers");
+        if (!response.ok) return;
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          await saveFarmersLocal(data);
+          if (!cancelled) setFarmers(data);
+        }
+      } catch {
+        // The locally cached farmer list keeps entry available offline.
+      }
+    };
+    void loadFarmers();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     const loadSlabs = async () => {
       const dateAd = await (await import("@/lib/nepali-dates")).bsToAd(dateBS);
+      try {
+        const [cowLocal, buffaloLocal] = await Promise.all([
+          getRateSlabLocal("cow", dateAd),
+          getRateSlabLocal("buffalo", dateAd),
+        ]);
+        if (!cancelled) {
+          if (cowLocal) setCowSlabs((cowLocal.slabs as Slab[]) || []);
+          if (buffaloLocal) setBuffaloSlabs((buffaloLocal.slabs as Slab[]) || []);
+        }
+      } catch {}
+      try {
       const [cowRes, bufRes] = await Promise.all([
         fetch(`/api/rates?milkType=cow&dateAD=${dateAd}`),
         fetch(`/api/rates?milkType=buffalo&dateAD=${dateAd}`),
@@ -336,11 +373,16 @@ function DailyEntryInner() {
         if (cowRes.ok) {
           const data = await cowRes.json();
           setCowSlabs(data?.slabs || []);
+          await saveRateSlabLocal("cow", dateAd, data?.slabs || []);
         }
         if (bufRes.ok) {
           const data = await bufRes.json();
           setBuffaloSlabs(data?.slabs || []);
+          await saveRateSlabLocal("buffalo", dateAd, data?.slabs || []);
         }
+      }
+      } catch {
+        // Cached rates are used while the server is unreachable.
       }
     };
     loadSlabs();
@@ -358,13 +400,10 @@ function DailyEntryInner() {
       }
       const dateAd = await (await import("@/lib/nepali-dates")).bsToAd(dateBS);
       const params = new URLSearchParams({ dateFrom: dateAd, dateTo: dateAd });
-      try {
-        const res = await fetch(`/api/entries?${params}`);
-        if (!res.ok) throw new Error("Failed to fetch entries");
-        const json = await res.json();
-        if (!Array.isArray(json)) throw new Error("Unexpected response");
-        const data = json as Array<{
+      const asSessions = (data: Array<{
           _id: string;
+          id?: string;
+          synced?: boolean;
           farmerId: string;
           milkType: string;
           session?: string;
@@ -372,9 +411,7 @@ function DailyEntryInner() {
           eveningQty: number;
           fatPercent: number;
           rateUsed: number;
-        }>;
-        if (cancelled) return;
-
+        }>) => {
         const next: Record<string, SessionState> = {};
         let totalL = 0;
         let totalAmt = 0;
@@ -383,7 +420,7 @@ function DailyEntryInner() {
           if (sess === "morning" || sess === "evening") {
             const key = `${e.farmerId}_${e.milkType}_${sess}`;
             next[key] = {
-              _id: e._id,
+              _id: e._id || e.id,
               farmerId: e.farmerId,
               milkType: e.milkType as MilkTypeKey,
               session: sess,
@@ -401,8 +438,29 @@ function DailyEntryInner() {
         setSessions(next);
         setTotalLiters(totalL);
         setTotalAmount(totalAmt);
+        };
+      try {
+        const localEntries = await getEntriesLocal(dateAd) as Array<{
+          _id: string; id: string; farmerId: string; milkType: string; session?: string;
+          morningQty: number; eveningQty: number; fatPercent: number; rateUsed: number; synced?: boolean;
+        }>;
+        if (!cancelled && localEntries.length) asSessions(localEntries);
+        const res = await fetch(`/api/entries?${params}`);
+        if (!res.ok) throw new Error("Failed to fetch entries");
+        const json = await res.json();
+        if (!Array.isArray(json)) throw new Error("Unexpected response");
+        const remote = json as Array<{
+          _id: string; farmerId: string; milkType: string; session?: string;
+          morningQty: number; eveningQty: number; fatPercent: number; rateUsed: number;
+        }>;
+        const remoteLocals = remote.map((entry) => ({ ...entry, id: entry._id, synced: true }));
+        await Promise.all(remoteLocals.map((entry) => saveEntryLocal(entry)));
+        const pending = localEntries.filter((entry) => !entry.synced);
+        const remoteKeys = new Set(remote.map((entry) => `${entry.farmerId}_${entry.milkType}_${entry.session}`));
+        const pendingOnly = pending.filter((entry) => !remoteKeys.has(`${entry.farmerId}_${entry.milkType}_${entry.session}`));
+        if (!cancelled) asSessions([...remote, ...pendingOnly]);
       } catch {
-        // ignore
+        // Locally saved entries remain visible when the network is unavailable.
       }
     };
     loadDayEntries();
@@ -474,6 +532,13 @@ function DailyEntryInner() {
     try {
       await saveEntryLocal(payload);
       await queueForSync({ id: localId, collection: "entries", data: payload });
+    } catch {
+      alert("Could not save this entry on this phone. Please check device storage and try again.");
+      setSavingKeys((prev) => ({ ...prev, [key]: false }));
+      return;
+    }
+
+    try {
       const res = await fetch("/api/entries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -481,6 +546,8 @@ function DailyEntryInner() {
       });
       if (!res.ok) throw new Error("Failed to sync entry");
       const saved = await res.json();
+      await saveEntryLocal({ ...payload, _id: saved._id, synced: true });
+      await markSynced("entries", localId);
       setSessions((prev) => ({
         ...prev,
         [key]: {
@@ -547,15 +614,14 @@ function DailyEntryInner() {
   const activeFarmers = farmers.filter((f) => !isTypeDone(f._id, "cow") || !isTypeDone(f._id, "buffalo"));
   const completedFarmers = farmers.filter((f) => isTypeDone(f._id, "cow") || isTypeDone(f._id, "buffalo"));
 
-  // flat list of every saved session, for the tabular completed view
-  const completedRows = completedFarmers.flatMap((f) =>
-    (["cow", "buffalo"] as MilkTypeKey[]).flatMap((mt) =>
-      (["morning", "evening"] as SessionKey[])
-        .map((s) => sessions[`${f._id}_${mt}_${s}`])
-        .filter((e): e is SessionState => !!e?.saved)
-        .map((e) => ({ farmer: f, entry: e }))
-    )
-  );
+  // Keep one completed row per farmer; milk types and sessions get their own columns.
+  const completedRows = completedFarmers.map((farmer) => ({
+    farmer,
+    cowMorning: sessions[`${farmer._id}_cow_morning`],
+    cowEvening: sessions[`${farmer._id}_cow_evening`],
+    buffaloMorning: sessions[`${farmer._id}_buffalo_morning`],
+    buffaloEvening: sessions[`${farmer._id}_buffalo_evening`],
+  }));
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -664,12 +730,16 @@ function DailyEntryInner() {
               </span>
               <span className="text-gray-300 text-[11px]">▾</span>
             </summary>
-            <table className="w-full text-[12.5px]">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px] text-[12.5px]">
               <thead>
                 <tr className="text-gray-400 text-[10.5px] uppercase tracking-wide">
                   <th className="text-left font-medium px-4 pb-2">Farmer</th>
-                  <th className="text-center font-medium pb-2">Type</th>
-                  <th className="text-right font-medium pb-2">Qty</th>
+                  <th className="text-right font-medium pb-2 text-amber-700">Cow AM</th>
+                  <th className="text-right font-medium pb-2 text-amber-700">Cow PM</th>
+                  <th className="text-right font-medium pb-2 text-teal-700">Buffalo AM</th>
+                  <th className="text-right font-medium pb-2 text-teal-700">Buffalo PM</th>
+                  <th className="text-right font-medium pb-2">Total</th>
                   <th className="text-right font-medium px-4 pb-2">Amount</th>
                 </tr>
               </thead>
