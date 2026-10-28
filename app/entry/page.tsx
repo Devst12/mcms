@@ -744,33 +744,26 @@ function DailyEntryInner() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {completedRows.map(({ farmer, entry }) => {
-                  const accent = ACCENT[entry.milkType];
-                  const amount = (parseFloat(entry.qty) || 0) * (entry.rateUsed || 0);
+                {completedRows.map(({ farmer, cowMorning, cowEvening, buffaloMorning, buffaloEvening }) => {
+                  const rowEntries = [cowMorning, cowEvening, buffaloMorning, buffaloEvening];
+                  const liters = rowEntries.reduce((total, entry) => total + (parseFloat(entry?.qty || "0") || 0), 0);
+                  const amount = rowEntries.reduce((total, entry) => total + (parseFloat(entry?.qty || "0") || 0) * (entry?.rateUsed || 0), 0);
+                  const qty = (entry?: SessionState) => entry?.saved ? `${(parseFloat(entry.qty) || 0).toFixed(1)} L` : "—";
                   return (
-                    <tr key={`${farmer._id}_${entry.milkType}_${entry.session}`} className="text-gray-700">
-                      <td className="px-4 py-2">
-                        <p className="font-semibold text-gray-900 truncate max-w-[110px]">{farmer.name}</p>
-                        <p className="text-[10.5px] text-gray-400">
-                          {entry.session === "morning" ? "☀️ AM" : "🌙 PM"}
-                        </p>
-                      </td>
-                      <td className="text-center py-2">
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full ${accent.bgSoft} ${accent.text} px-2 py-0.5 text-[10.5px] font-semibold`}
-                        >
-                          {entry.milkType === "cow" ? "🐄" : "🐃"}
-                        </span>
-                      </td>
-                      <td className="text-right py-2 tabular-nums font-medium">{entry.qty} L</td>
-                      <td className="text-right px-4 py-2 tabular-nums font-bold text-gray-900">
-                        Rs {amount.toFixed(2)}
-                      </td>
+                    <tr key={farmer._id} className="text-gray-700">
+                      <td className="px-4 py-2"><p className="font-semibold text-gray-900 truncate max-w-[110px]">{farmer.name}</p></td>
+                      <td className="text-right py-2 tabular-nums font-medium text-amber-700">{qty(cowMorning)}</td>
+                      <td className="text-right py-2 tabular-nums font-medium text-amber-700">{qty(cowEvening)}</td>
+                      <td className="text-right py-2 tabular-nums font-medium text-teal-700">{qty(buffaloMorning)}</td>
+                      <td className="text-right py-2 tabular-nums font-medium text-teal-700">{qty(buffaloEvening)}</td>
+                      <td className="text-right py-2 tabular-nums font-bold">{liters.toFixed(1)} L</td>
+                      <td className="text-right px-4 py-2 tabular-nums font-bold text-gray-900">Rs {amount.toFixed(2)}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+            </div>
           </details>
         )}
 
