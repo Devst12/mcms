@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getReconciliation, getPeriodDateRange } from "@/lib/reconciliation";
+import { getReconciliation } from "@/lib/reconciliation";
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const period = { type: periodType, from, to };
     const results = await getReconciliation(period);
     return NextResponse.json(results);
-  } catch (_error) {
+  } catch {
     return NextResponse.json({ error: "Failed to calculate reconciliation" }, { status: 500 });
   }
 }
