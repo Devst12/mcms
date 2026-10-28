@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
-import { getActiveRateSlab } from "@/lib/db";
-import { ObjectId } from "mongodb";
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,7 +10,7 @@ export async function GET(request: NextRequest) {
     const milkType = searchParams.get("milkType") || undefined;
     const entries = await import("@/lib/db").then(m => m.getEntries(dateFrom, dateTo, farmerId, milkType));
     return NextResponse.json(entries);
-  } catch (_error) {
+  } catch {
     return NextResponse.json({ error: "Failed to fetch entries" }, { status: 500 });
   }
 }
@@ -40,19 +38,17 @@ export async function POST(request: NextRequest) {
           rateUsed = s ? s.rate : slab.slabs[slab.slabs.length - 1]?.rate || 0;
         }
       }
-      const updated = await db.collection("entries").updateOne(
+      await db.collection("entries").updateOne(
         { _id: existing._id },
         { $set: { morningQty: body.morningQty, eveningQty: body.eveningQty, fatPercent: body.fatPercent, rateUsed, session } }
       );
-      if (updated.modifiedCount > 0) {
-        const fresh = await db.collection("entries").findOne({ _id: existing._id });
-        return NextResponse.json(fresh);
-      }
+      const fresh = await db.collection("entries").findOne({ _id: existing._id });
+      return NextResponse.json(fresh);
     }
 
     const entry = await createEntry(body);
     return NextResponse.json(entry, { status: 201 });
-  } catch (_error) {
+  } catch {
     return NextResponse.json({ error: "Failed to create entry" }, { status: 500 });
   }
 }
