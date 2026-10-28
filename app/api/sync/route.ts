@@ -10,9 +10,11 @@ export async function POST(request: NextRequest) {
     const results = [];
     for (const item of items) {
       try {
+        let serverId: string | undefined;
         if (item.collection === "entries") {
-          const { createEntry } = await import("@/lib/db");
-          await createEntry(item.data);
+          const { upsertEntryBySession } = await import("@/lib/db");
+          const saved = await upsertEntryBySession(item.data);
+          serverId = saved._id;
         } else if (item.collection === "company_collections") {
           const { upsertCompanyCollection } = await import("@/lib/db");
           await upsertCompanyCollection(item.data);
@@ -20,13 +22,13 @@ export async function POST(request: NextRequest) {
           const { createAdvance } = await import("@/lib/db");
           await createAdvance(item.data);
         }
-        results.push({ id: item.id, success: true });
+        results.push({ id: item.id, success: true, serverId });
       } catch {
         results.push({ id: item.id, success: false });
       }
     }
     return NextResponse.json({ results });
-  } catch (_error) {
+  } catch {
     return NextResponse.json({ error: "Sync failed" }, { status: 500 });
   }
 }
