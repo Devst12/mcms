@@ -24,8 +24,8 @@
 @theme inline {
   --color-background: var(--color-surface);
   --color-foreground: var(--color-text-primary);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: Arial, "Noto Sans Devanagari", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
 /* ===== Mobile-first reset ===== */
@@ -42,7 +42,7 @@ html {
 body {
   background: var(--color-surface-muted);
   color: var(--color-text-primary);
-  font-family: var(--font-geist-sans), var(--font-mukta), Arial, Helvetica, sans-serif;
+  font-family: Arial, "Noto Sans Devanagari", "Nirmala UI", Helvetica, sans-serif;
   overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
