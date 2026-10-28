@@ -218,7 +218,13 @@ export default function Navbar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  onClick={() => setShowMore(false)}
+                  onClick={(event) => {
+                    setShowMore(false);
+                    if (!navigator.onLine) {
+                      event.preventDefault();
+                      window.location.assign(item.href);
+                    }
+                  }}
                   className={`flex flex-col items-center justify-center min-h-[52px] rounded-xl text-[11.5px] font-semibold px-1 text-center transition-colors ${
                     active ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-600"
                   }`}

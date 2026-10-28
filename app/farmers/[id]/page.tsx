@@ -1,7 +1,8 @@
 import { getFarmerById, getEntries, getAdvances } from "@/lib/db";
 import Link from "next/link";
-import { User, PiggyBank, Milk, Edit3, FileText, ExternalLink } from "lucide-react";
+import { User, PiggyBank, Milk, FileText, ExternalLink } from "lucide-react";
 import DeleteFarmerButton from "@/components/DeleteFarmerButton";
+import { summarizeEntriesByDay } from "@/lib/daily-entry-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ export default async function FarmerDetail({ params }: { params: Promise<{ id: s
   const cowTotal = cowEntries.reduce((sum, e) => sum + e.morningQty + e.eveningQty, 0);
   const buffaloTotal = buffaloEntries.reduce((sum, e) => sum + e.morningQty + e.eveningQty, 0);
   const totalAmount = entries.reduce((sum, e) => sum + (e.morningQty + e.eveningQty) * e.rateUsed, 0);
+  const recentDays = summarizeEntriesByDay(entries).slice(0, 10);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -152,52 +154,32 @@ export default async function FarmerDetail({ params }: { params: Promise<{ id: s
               </Link>
             </div>
           ) : (
-            <div className="rounded-2xl bg-white shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-sm text-left">
-                  <thead>
-                    <tr className="text-gray-400 text-[10.5px] uppercase tracking-wide">
-                      <th className="px-4 pb-2.5 font-medium">Date</th>
-                      <th className="px-4 pb-2.5 font-medium">Type</th>
-                      <th className="px-4 pb-2.5 text-right font-medium">Morning (L)</th>
-                      <th className="px-4 pb-2.5 text-right font-medium">Evening (L)</th>
-                      <th className="px-4 pb-2.5 text-right font-medium">Fat %</th>
-                      <th className="px-4 pb-2.5 text-right font-medium">Rate</th>
-                      <th className="px-4 pb-2.5 text-right font-medium">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {entries.slice(0, 10).map((e) => (
-                      <tr key={e._id}>
-                        <td className="px-4 py-2.5 font-medium text-gray-900 whitespace-nowrap">{e.dateBS}</td>
-                        <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-1.5">
-                            {e.milkType === "cow" ? (
-                              <span className="text-amber-500">🐄 Cow</span>
-                            ) : (
-                              <span className="text-teal-600">🐃 Buffalo</span>
-                            )}
-                            {e.editHistory && e.editHistory.length > 0 && (
-                              <span title={`Edited ${e.editHistory.length}x`}>
-                                <Edit3 size={12} strokeWidth={1.5} className="text-gray-400" />
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-900">{e.morningQty.toFixed(1)}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-900">{e.eveningQty.toFixed(1)}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-900">{e.fatPercent.toFixed(1)}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums text-gray-900">Rs. {e.rateUsed.toFixed(1)}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-gray-900">
-                          Rs. {((e.morningQty + e.eveningQty) * e.rateUsed).toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+            <div className="space-y-2">
+              {recentDays.map((day) => (
+                <div key={day.dateAD || day.dateBS} className="rounded-xl bg-white px-3 py-3 shadow-sm">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-sm font-bold text-gray-900">{day.dateBS}</p>
+                    <p className="text-xs font-bold tabular-nums text-gray-900">Rs {day.totalAmount.toFixed(0)}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-lg bg-amber-50 px-2.5 py-2">
+                      <p className="text-xs font-bold text-amber-800">Cow</p>
+                      <p className="mt-1 text-[11px] tabular-nums text-gray-700">AM {day.cowMorning.toFixed(1)} L · PM {day.cowEvening.toFixed(1)} L</p>
+                      <p className="text-[11px] font-semibold text-gray-900">Total {(day.cowMorning + day.cowEvening).toFixed(1)} L</p>
+                    </div>
+                    <div className="rounded-lg bg-teal-50 px-2.5 py-2">
+                      <p className="text-xs font-bold text-teal-800">Buffalo</p>
+                      <p className="mt-1 text-[11px] tabular-nums text-gray-700">AM {day.buffaloMorning.toFixed(1)} L · PM {day.buffaloEvening.toFixed(1)} L</p>
+                      <p className="text-[11px] font-semibold text-gray-900">Total {(day.buffaloMorning + day.buffaloEvening).toFixed(1)} L</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex justify-between border-t border-gray-100 pt-2 text-xs">
+                    <span className="text-gray-500">Day total</span>
+                    <span className="font-bold tabular-nums text-gray-900">{day.totalLiters.toFixed(1)} L</span>
+                  </div>
+                </div>
+              ))}
+            </div>          )}
         </div>
       </div>
     </div>

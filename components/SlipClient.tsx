@@ -1,11 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import PeriodPicker, { type Period } from "@/components/PeriodPicker";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
+import { getEntriesLocalRange, getFarmersLocal, saveEntryLocal, saveFarmersLocal } from "@/lib/indexed-db";
+import { summarizeEntriesByDay } from "@/lib/daily-entry-summary";
 
 interface EntryData {
   _id: string;
+  id?: string;
   dateAD: string;
   dateBS: string;
   farmerId: string;
@@ -14,6 +18,8 @@ interface EntryData {
   eveningQty: number;
   fatPercent: number;
   rateUsed: number;
+  session?: "morning" | "evening" | "both";
+  synced?: boolean;
 }
 
 interface FarmerData {
@@ -40,10 +46,23 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
   };
 
   const fetchFarmers = useCallback(async () => {
+    const cached = await getFarmersLocal().catch(() => []);
+    if (cached.length) {
+      setFarmers(cached.map((farmer) => ({
+        _id: String(farmer._id || farmer.id || ""),
+        name: String(farmer.name || ""),
+        code: String(farmer.code || ""),
+        phone: typeof farmer.phone === "string" ? farmer.phone : undefined,
+      })));
+    }
     try {
-      const res = await fetch("/api/farmers");
+      const res = await fetchWithTimeout("/api/farmers", {}, 6000);
+      if (!res.ok) return;
       const json = await res.json();
-      setFarmers(Array.isArray(json) ? json : []);
+      if (Array.isArray(json)) {
+        await saveFarmersLocal(json);
+        setFarmers(json);
+      }
     } catch {
       // keep empty list on failure
     }
@@ -75,22 +94,42 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
       to = period.to;
     }
 
-    try {
-      const res = await fetch(`/api/entries?farmerId=${selectedFarmer}&dateFrom=${from}&dateTo=${to}`);
-      const json = await res.json();
-      setEntries(Array.isArray(json) ? json : []);
-    } catch {
-      setEntries([]);
+    const cached = await getEntriesLocalRange(from, to).catch(() => []) as unknown as EntryData[];
+    const farmerCache = cached.filter((entry) => entry.farmerId === selectedFarmer);
+    if (farmerCache.length) {
+      setEntries(farmerCache.map((entry) => ({ ...entry, _id: entry._id || entry.id || "" })));
+      setLoading(false);
     }
-    setLoading(false);
+
+    try {
+      const params = new URLSearchParams({ farmerId: selectedFarmer, dateFrom: from, dateTo: to });
+      const res = await fetchWithTimeout(`/api/entries?${params}`, {}, 6000);
+      if (!res.ok) throw new Error("Failed to load entries");
+      const json = await res.json();
+      const remote = Array.isArray(json) ? json as EntryData[] : [];
+      await Promise.all(remote.map((entry) => saveEntryLocal({ ...entry, id: entry._id, synced: true })));
+      const remoteSessions = new Set(remote.filter((entry) => entry.session).map((entry) =>
+        `${entry.dateAD}_${entry.farmerId}_${entry.milkType}_${entry.session}`
+      ));
+      const pending = farmerCache.filter((entry) => !entry.synced && !remoteSessions.has(
+        `${entry.dateAD}_${entry.farmerId}_${entry.milkType}_${entry.session}`
+      ));
+      setEntries([...remote, ...pending].map((entry) => ({ ...entry, _id: entry._id || entry.id || "" })));
+    } catch {
+      setEntries(farmerCache.map((entry) => ({ ...entry, _id: entry._id || entry.id || "" })));
+    } finally {
+      setLoading(false);
+    }
   }, [selectedFarmer, period]);
 
   useEffect(() => {
-    fetchFarmers();
+    const timer = window.setTimeout(() => { void fetchFarmers(); }, 0);
+    return () => window.clearTimeout(timer);
   }, [fetchFarmers]);
 
   useEffect(() => {
-    loadEntries();
+    const timer = window.setTimeout(() => { void loadEntries(); }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadEntries]);
 
   const selected = farmers.find((f) => f._id === selectedFarmer);
@@ -99,7 +138,8 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
   const cowTotal = cowEntries.reduce((s, e) => s + e.morningQty + e.eveningQty, 0);
   const buffaloTotal = buffaloEntries.reduce((s, e) => s + e.morningQty + e.eveningQty, 0);
   const totalAmount = entries.reduce((s, e) => s + (e.morningQty + e.eveningQty) * e.rateUsed, 0);
-  const slipRefNum = `SLP-${selected?.code || "FARM"}-${entries.length}-${Math.round(totalAmount * 100)}`;
+  const dailyRows = useMemo(() => summarizeEntriesByDay(entries), [entries]);
+  const slipRefNum = `SLP-${selected?.code || "FARM"}-${dailyRows.length}-${Math.round(totalAmount * 100)}`;
 
   const handlePrint = () => {
     window.print();
@@ -168,16 +208,18 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-md mx-auto px-4 py-5 space-y-4 pb-10">
         {/* Header */}
-        <h1 className="text-[22px] font-bold text-gray-900 tracking-tight">स्लिप</h1>
+        <h1 className="text-[22px] font-bold text-gray-900 tracking-tight">Milk slip</h1>
 
         {/* Farmer selector */}
         <div className="rounded-2xl bg-white shadow-sm px-4 py-4 space-y-3">
+          <label htmlFor="slip-farmer" className="block text-sm font-semibold text-gray-700">Choose farmer</label>
           <select
+            id="slip-farmer"
             value={selectedFarmer}
             onChange={(e) => setSelectedFarmer(e.target.value)}
             className="w-full px-3.5 py-2.5 rounded-lg bg-gray-50 text-[14px] font-semibold text-gray-800 outline-none ring-1 ring-inset ring-gray-200 focus:ring-2 focus:ring-gray-400 transition-shadow"
           >
-            <option value="">किसान छान्नुहोस्</option>
+            <option value="">Choose a farmer</option>
             {farmers.map((f) => (
               <option key={f._id} value={f._id}>
                 {f.name} ({f.code})
@@ -190,16 +232,16 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
         {!selectedFarmer ? (
           <div className="rounded-2xl bg-white shadow-sm text-center py-10 px-6">
             <p className="text-3xl mb-3">🧾</p>
-            <h2 className="text-[16px] font-bold text-gray-900 mb-1">किसान छान्नुहोस्</h2>
-            <p className="text-[13px] text-gray-400">स्लिप बनाउन किसान छान्नुहोस्।</p>
+            <h2 className="text-[16px] font-bold text-gray-900 mb-1">Choose a farmer</h2>
+            <p className="text-[13px] text-gray-400">Select a farmer to make their milk slip.</p>
           </div>
         ) : loading ? (
           <div className="text-center py-10 text-gray-400 text-[13px] font-medium">Loading…</div>
         ) : entries.length === 0 ? (
           <div className="rounded-2xl bg-white shadow-sm text-center py-10 px-6">
             <p className="text-3xl mb-3">📭</p>
-            <h2 className="text-[16px] font-bold text-gray-900 mb-1">यो अवधिमा प्रविष्टि छैन</h2>
-            <p className="text-[13px] text-gray-400">अर्को मिति दायरा प्रयास गर्नुहोस्।</p>
+            <h2 className="text-[16px] font-bold text-gray-900 mb-1">No milk records for this period</h2>
+            <p className="text-[13px] text-gray-400">Choose another date range.</p>
           </div>
         ) : (
           <>
@@ -243,48 +285,49 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
                   <p className="text-xs text-gray-500">{(cowTotal + buffaloTotal).toFixed(1)} Litres</p>
                 </div>
 
-                {/* Daily breakdown */}
-                {entries.length <= 14 ? (
-                  <table className="w-full text-xs mb-3">
-                    <thead>
-                      <tr className="border-b border-gray-400">
-                        <th className="text-left py-1 font-bold">Date</th>
-                        <th className="text-right py-1 font-bold">Type</th>
-                        <th className="text-right py-1 font-bold">Qty</th>
-                        <th className="text-right py-1 font-bold">Fat</th>
-                        <th className="text-right py-1 font-bold">Rate</th>
-                        <th className="text-right py-1 font-bold">Amt</th>
+                {/* One row per day, with both milk types kept together. */}
+                <table className="w-full table-fixed border-collapse text-[9px] leading-tight mb-3">
+                  <colgroup>
+                    <col style={{ width: "18%" }} />
+                    <col style={{ width: "25%" }} />
+                    <col style={{ width: "27%" }} />
+                    <col style={{ width: "13%" }} />
+                    <col style={{ width: "17%" }} />
+                  </colgroup>
+                  <thead>
+                    <tr className="border-y border-gray-400 text-[8px] uppercase">
+                      <th className="py-1 text-left">Date</th>
+                      <th className="py-1 text-center text-amber-800">Cow</th>
+                      <th className="py-1 text-center text-teal-800">Buffalo</th>
+                      <th className="py-1 text-right">L</th>
+                      <th className="py-1 text-right">Rs</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dailyRows.map((day) => (
+                      <tr key={day.dateAD || day.dateBS} className="border-b border-gray-200 align-top">
+                        <td className="py-1 text-left whitespace-nowrap">{day.dateBS}</td>
+                        <td className="py-1 text-center tabular-nums">
+                          <span className="block">AM {day.cowMorning.toFixed(1)}</span>
+                          <span className="block">PM {day.cowEvening.toFixed(1)}</span>
+                        </td>
+                        <td className="py-1 text-center tabular-nums">
+                          <span className="block">AM {day.buffaloMorning.toFixed(1)}</span>
+                          <span className="block">PM {day.buffaloEvening.toFixed(1)}</span>
+                        </td>
+                        <td className="py-1 text-right tabular-nums">{day.totalLiters.toFixed(1)}</td>
+                        <td className="py-1 text-right font-bold tabular-nums">{day.totalAmount.toFixed(0)}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {entries.map((e) => (
-                        <tr key={e._id} className="border-b border-gray-200">
-                          <td className="py-1 text-left">{e.dateBS.slice(-5)}</td>
-                          <td className="py-1 text-right">{e.milkType === "cow" ? "🐄" : "🐃"}</td>
-                          <td className="py-1 text-right tabular-nums">{(e.morningQty + e.eveningQty).toFixed(1)}</td>
-                          <td className="py-1 text-right tabular-nums">{e.fatPercent.toFixed(1)}</td>
-                          <td className="py-1 text-right tabular-nums">{e.rateUsed.toFixed(2)}</td>
-                          <td className="py-1 text-right font-bold tabular-nums">
-                            {((e.morningQty + e.eveningQty) * e.rateUsed).toFixed(2)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t-2 border-gray-800 font-bold">
-                        <td colSpan={2} className="py-1 text-left">Total</td>
-                        <td className="py-1 text-right tabular-nums">{(cowTotal + buffaloTotal).toFixed(1)}</td>
-                        <td colSpan={2}></td>
-                        <td className="py-1 text-right tabular-nums">{totalAmount.toFixed(2)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                ) : (
-                  <div className="text-center mb-3 border-t border-gray-200 pt-2">
-                    <p className="text-xs text-gray-500">{entries.length} entries total</p>
-                  </div>
-                )}
-
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-gray-800 font-bold">
+                      <td colSpan={3} className="py-1 text-left">Total</td>
+                      <td className="py-1 text-right tabular-nums">{(cowTotal + buffaloTotal).toFixed(1)}</td>
+                      <td className="py-1 text-right tabular-nums">{totalAmount.toFixed(0)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
                 {/* Footer */}
                 <div className="border-t-2 border-gray-800 pt-2 text-center text-xs text-gray-600">
                   <p>Slip #: {slipRefNum}</p>
@@ -299,20 +342,20 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
                 onClick={handlePrint}
                 className="w-full py-3.5 rounded-xl bg-gray-900 text-white font-bold text-[15px] shadow-sm active:opacity-80 transition-opacity"
               >
-                🖨️ Print Slip
+                Print slip
               </button>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={handleDownloadPDF}
                   className="w-full py-3 rounded-xl bg-white shadow-sm text-gray-900 font-semibold text-[13.5px] ring-1 ring-inset ring-gray-200 active:opacity-80 transition-opacity"
                 >
-                  📄 PDF
+                  Download PDF
                 </button>
                 <button
                   onClick={handleDownloadJPG}
                   className="w-full py-3 rounded-xl bg-white shadow-sm text-gray-900 font-semibold text-[13.5px] ring-1 ring-inset ring-gray-200 active:opacity-80 transition-opacity"
                 >
-                  🖼️ JPG
+                  Download image
                 </button>
               </div>
             </div>
