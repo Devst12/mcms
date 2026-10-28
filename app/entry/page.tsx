@@ -350,6 +350,30 @@ function DailyEntryInner() {
     return () => { cancelled = true; };
   }, []);
 
+  // Warm a recent history window so previously entered milk stays available offline.
+  useEffect(() => {
+    const cacheRecentEntries = async () => {
+      if (!navigator.onLine) return;
+      try {
+        const dateTo = await (await import("@/lib/nepali-dates")).bsToAd(getTodayBs());
+        const start = new Date(`${dateTo}T00:00:00`);
+        start.setDate(start.getDate() - 90);
+        const dateFrom = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+        const response = await fetch(`/api/entries?dateFrom=${dateFrom}&dateTo=${dateTo}`);
+        if (!response.ok) return;
+        const entries = await response.json();
+        if (Array.isArray(entries)) {
+          await Promise.all(entries.map((entry) => saveEntryLocal({ ...entry, id: entry._id, synced: true })));
+        }
+      } catch {
+        // Keep existing device data if recent history cannot be refreshed.
+      }
+    };
+    void cacheRecentEntries();
+    window.addEventListener("online", cacheRecentEntries);
+    return () => window.removeEventListener("online", cacheRecentEntries);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const loadSlabs = async () => {

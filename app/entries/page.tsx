@@ -5,9 +5,11 @@ import { useSearchParams } from "next/navigation";
 import { Pencil, Trash2 } from "lucide-react";
 import PeriodPicker, { type Period } from "@/components/PeriodPicker";
 import Modal from "@/components/Modal";
+import { getEntriesLocalRange, getFarmersLocal, saveEntryLocal, saveFarmersLocal } from "@/lib/indexed-db";
 
 interface EntryData {
   _id: string;
+  id?: string;
   dateAD: string;
   dateBS: string;
   farmerId: string;
@@ -17,11 +19,15 @@ interface EntryData {
   eveningQty: number;
   fatPercent: number;
   rateUsed: number;
+  session?: "morning" | "evening" | "both";
+  synced?: boolean;
+  createdAt?: string;
 }
 
 interface FarmerDayGroup {
   farmerId: string;
   farmerName: string;
+  dateBS: string;
   cow: EntryData[];
   buffalo: EntryData[];
 }
@@ -84,10 +90,29 @@ function EntriesInner() {
     if (selectedFarmer) params.set("farmerId", selectedFarmer);
     params.set("dateFrom", from);
     params.set("dateTo", to);
-    const res = await fetch(`/api/entries?${params}`);
-    const json = await res.json();
-    setEntries(Array.isArray(json) ? json : []);
-    setLoading(false);
+    try {
+      const res = await fetch(`/api/entries?${params}`);
+      if (!res.ok) throw new Error("Could not load entries from server");
+      const json = await res.json();
+      const remote = Array.isArray(json) ? json as EntryData[] : [];
+      await Promise.all(remote.map((entry) => saveEntryLocal({ ...entry, id: entry._id, synced: true })));
+      const cached = await getEntriesLocalRange(from, to) as unknown as EntryData[];
+      const remoteSessions = new Set(remote.filter((entry) => entry.session).map((entry) =>
+        `${entry.dateAD}_${entry.farmerId}_${entry.milkType}_${entry.session}`
+      ));
+      const pending = cached.filter((entry) => !entry.synced && !remoteSessions.has(
+        `${entry.dateAD}_${entry.farmerId}_${entry.milkType}_${entry.session}`
+      ));
+      const result = [...remote, ...pending].filter((entry) => !selectedFarmer || entry.farmerId === selectedFarmer);
+      setEntries(result.map((entry) => ({ ...entry, _id: entry._id || entry.id || "" })));
+    } catch {
+      const cached = await getEntriesLocalRange(from, to) as unknown as EntryData[];
+      setEntries(cached
+        .filter((entry) => !selectedFarmer || entry.farmerId === selectedFarmer)
+        .map((entry) => ({ ...entry, _id: entry._id || entry.id || "" })));
+    } finally {
+      setLoading(false);
+    }
   }, [selectedFarmer, period]);
 
   useEffect(() => {
@@ -103,11 +128,24 @@ function EntriesInner() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/farmers")
-      .then((r) => r.json())
-      .then((data) => {
-        if (!cancelled && Array.isArray(data)) setFarmers(data);
-      });
+    const loadFarmers = async () => {
+      const local = await getFarmersLocal().catch(() => []);
+      if (!cancelled && local.length) {
+        setFarmers(local.map((farmer) => ({ _id: String(farmer._id || farmer.id), name: String(farmer.name || ""), code: String(farmer.code || "") })));
+      }
+      try {
+        const response = await fetch("/api/farmers");
+        if (!response.ok) return;
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          await saveFarmersLocal(data);
+          if (!cancelled) setFarmers(data);
+        }
+      } catch {
+        // Use locally cached farmers when offline.
+      }
+    };
+    void loadFarmers();
     return () => {
       cancelled = true;
     };
@@ -164,10 +202,11 @@ function EntriesInner() {
   const grandTotal = entries.reduce((s, e) => s + (e.morningQty + e.eveningQty) * e.rateUsed, 0);
 
   const grouped = entriesWithNames.reduce((acc, e) => {
-    const day = acc[e.dateBS] || (acc[e.dateBS] = []);
+    const dayKey = e.dateAD || e.dateBS;
+    const day = acc[dayKey] || (acc[dayKey] = []);
     let farmer = day.find((group) => group.farmerId === e.farmerId);
     if (!farmer) {
-      farmer = { farmerId: e.farmerId, farmerName: e.farmerName || e.farmerId, cow: [], buffalo: [] };
+      farmer = { farmerId: e.farmerId, farmerName: e.farmerName || e.farmerId, dateBS: e.dateBS, cow: [], buffalo: [] };
       day.push(farmer);
     }
     farmer[e.milkType].push(e);
@@ -227,7 +266,7 @@ function EntriesInner() {
             return (
               <div key={date} className="rounded-2xl bg-white shadow-sm overflow-hidden">
                 <div className="px-4 pt-4 pb-1">
-                  <h3 className="text-[13px] font-bold text-gray-900">{date}</h3>
+                  <h3 className="text-[13px] font-bold text-gray-900">{dayGroups[0]?.dateBS || date}</h3>
                 </div>
 
                 {/* One farmer card with Cow and Buffalo side by side on phones */}

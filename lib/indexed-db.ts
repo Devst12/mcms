@@ -45,7 +45,30 @@ export async function saveEntryLocal(entry: Record<string, unknown>): Promise<vo
 
 export async function getEntriesLocal(dateAD: string): Promise<Record<string, unknown>[]> {
   const db = await getDb();
-  return db.getAllFromIndex("entries", "dateAD", dateAD);
+  return dedupeCachedEntries(await db.getAllFromIndex("entries", "dateAD", dateAD));
+}
+
+export async function getEntriesLocalRange(dateFrom: string, dateTo: string): Promise<Record<string, unknown>[]> {
+  const db = await getDb();
+  const entries = await db.getAll("entries") as Record<string, unknown>[];
+  return dedupeCachedEntries(entries.filter((entry) =>
+    typeof entry.dateAD === "string" && entry.dateAD >= dateFrom && entry.dateAD <= dateTo
+  ));
+}
+
+function dedupeCachedEntries(entries: Record<string, unknown>[]): Record<string, unknown>[] {
+  const latestBySession = new Map<string, Record<string, unknown>>();
+  for (const entry of entries) {
+    const session = entry.session;
+    const key = typeof session === "string" && session
+      ? `${entry.dateAD}_${entry.farmerId}_${entry.milkType}_${session}`
+      : String(entry.id || entry._id);
+    const previous = latestBySession.get(key);
+    if (!previous || String(entry.createdAt || "") > String(previous.createdAt || "")) {
+      latestBySession.set(key, entry);
+    }
+  }
+  return [...latestBySession.values()];
 }
 
 export async function saveFarmersLocal(farmers: Record<string, unknown>[]): Promise<void> {

@@ -31,6 +31,12 @@ function NavItem({ href, label, Icon, active }: { href: string; label: string; I
   return (
     <Link
       href={href}
+      onClick={(event) => {
+        if (!navigator.onLine) {
+          event.preventDefault();
+          window.location.assign(href);
+        }
+      }}
       className={`flex flex-col items-center justify-center gap-0.5 min-w-[56px] py-1.5 rounded-xl transition-colors ${
         active ? "text-gray-900" : "text-gray-400"
       }`}

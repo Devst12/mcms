@@ -1,12 +1,13 @@
-const CACHE_NAME = "dudh-hisab-v2";
-const APP_SHELL = ["/entry", "/manifest.json", "/icon.svg"];
+const CACHE_NAME = "dudh-hisab-v3";
+const APP_SHELL = ["/entry", "/entries", "/manifest.json", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
       await cache.addAll(APP_SHELL);
-      const page = await cache.match("/entry");
-      if (page) {
+      for (const pagePath of ["/entry", "/entries"]) {
+        const page = await cache.match(pagePath);
+        if (!page) continue;
         const html = await page.clone().text();
         const assets = [...html.matchAll(/(?:src|href)="([^\"]*\/_next\/static\/[^\"]+)"/g)]
           .map((match) => match[1]);
