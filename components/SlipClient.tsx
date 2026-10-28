@@ -5,7 +5,8 @@ import { useSearchParams } from "next/navigation";
 import PeriodPicker, { type Period } from "@/components/PeriodPicker";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getEntriesLocalRange, getFarmersLocal, saveEntryLocal, saveFarmersLocal } from "@/lib/indexed-db";
-import { summarizeEntriesByDay } from "@/lib/daily-entry-summary";
+import { summarizeEntriesByDay, type DailyEntrySummary } from "@/lib/daily-entry-summary";
+import { bsToAd, formatBsMonth, getBsMonthAdRange, getTodayBs } from "@/lib/nepali-dates";
 
 interface EntryData {
   _id: string;
@@ -29,44 +30,128 @@ interface FarmerData {
   phone?: string;
 }
 
-function oklchToRgb(match: string): string {
-  const values = match.match(/oklch\(\s*([\d.]+%?)\s+([\d.]+%?)\s+([\d.]+)(?:deg)?(?:\s*\/\s*([\d.]+%?))?\s*\)/i);
-  if (!values) return match;
-  const parse = (value: string, percentScale: number) => value.endsWith("%")
-    ? Number.parseFloat(value) / 100 * percentScale
-    : Number.parseFloat(value);
-  const L = parse(values[1], 1);
-  const C = parse(values[2], 0.4);
-  const h = Number.parseFloat(values[3]) * Math.PI / 180;
-  const a = Math.cos(h) * C;
-  const b = Math.sin(h) * C;
-  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
-  const linearToSrgb = (value: number) => {
-    const channel = value <= 0.0031308 ? 12.92 * value : 1.055 * Math.max(0, value) ** (1 / 2.4) - 0.055;
-    return Math.round(Math.max(0, Math.min(1, channel)) * 255);
-  };
-  const red = linearToSrgb(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s);
-  const green = linearToSrgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s);
-  const blue = linearToSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s);
-  const alpha = values[4] ? parse(values[4], 1) : 1;
-  return alpha < 1 ? `rgba(${red}, ${green}, ${blue}, ${alpha})` : `rgb(${red}, ${green}, ${blue})`;
+interface SlipExportData {
+  farmerName: string;
+  farmerCode: string;
+  phone?: string;
+  periodLabel: string;
+  cowTotal: number;
+  buffaloTotal: number;
+  totalAmount: number;
+  slipRefNum: string;
+  dailyRows: DailyEntrySummary[];
 }
 
-function normalizeCaptureColors(document: Document, root: HTMLElement) {
-  const elements = [root, ...root.querySelectorAll<HTMLElement>("*")];
-  for (const element of elements) {
-    const computed = document.defaultView?.getComputedStyle(element);
-    if (!computed) continue;
-    for (let index = 0; index < computed.length; index += 1) {
-      const property = computed.item(index);
-      const value = computed.getPropertyValue(property);
-      if (value.includes("oklch(")) {
-        element.style.setProperty(property, value.replace(/oklch\([^)]*\)/gi, oklchToRgb));
-      }
-    }
-  }
+function createSlipCanvas(data: SlipExportData): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  const width = 720;
+  const rowHeight = 58;
+  const top = 390;
+  canvas.width = width;
+  canvas.height = top + data.dailyRows.length * rowHeight + 100;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("This browser cannot create an image");
+  const fontFamily = '"Noto Sans Devanagari", "Nirmala UI", Arial, sans-serif';
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "#111827";
+  context.textAlign = "center";
+  context.font = `bold 32px ${fontFamily}`;
+  context.fillText("Dudh Hisab", width / 2, 52);
+  context.font = `20px ${fontFamily}`;
+  context.fillStyle = "#4b5563";
+  context.fillText("Milk Collection Receipt", width / 2, 83);
+  context.fillText(data.periodLabel, width / 2, 111);
+  context.strokeStyle = "#374151";
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(32, 132);
+  context.lineTo(width - 32, 132);
+  context.stroke();
+
+  context.textAlign = "left";
+  context.fillStyle = "#111827";
+  context.font = `bold 24px ${fontFamily}`;
+  context.fillText(data.farmerName, 32, 171, width - 64);
+  context.font = `18px ${fontFamily}`;
+  context.fillStyle = "#4b5563";
+  context.fillText(`${data.farmerCode}${data.phone ? ` | ${data.phone}` : ""}`, 32, 199);
+
+  context.fillStyle = "#fffbeb";
+  context.fillRect(32, 220, 316, 70);
+  context.fillStyle = "#f0fdfa";
+  context.fillRect(372, 220, 316, 70);
+  context.fillStyle = "#92400e";
+  context.font = `18px ${fontFamily}`;
+  context.fillText("Cow total", 48, 247);
+  context.fillStyle = "#115e59";
+  context.fillText("Buffalo total", 388, 247);
+  context.fillStyle = "#111827";
+  context.font = `bold 24px ${fontFamily}`;
+  context.fillText(`${data.cowTotal.toFixed(1)} L`, 48, 278);
+  context.fillText(`${data.buffaloTotal.toFixed(1)} L`, 388, 278);
+
+  context.strokeStyle = "#d1d5db";
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(32, 311);
+  context.lineTo(width - 32, 311);
+  context.stroke();
+  context.textAlign = "center";
+  context.fillStyle = "#6b7280";
+  context.font = `18px ${fontFamily}`;
+  context.fillText("Grand total", width / 2, 340);
+  context.fillStyle = "#111827";
+  context.font = `bold 30px ${fontFamily}`;
+  context.fillText(`Rs. ${data.totalAmount.toFixed(2)}`, width / 2, 375);
+
+  const x = { date: 32, cow: 142, buffalo: 336, liters: 553, amount: 688 };
+  context.fillStyle = "#374151";
+  context.font = `bold 15px ${fontFamily}`;
+  context.textAlign = "left";
+  context.fillText("DATE", x.date, top);
+  context.textAlign = "center";
+  context.fillText("COW AM / PM", x.cow + 80, top);
+  context.fillText("BUFFALO AM / PM", x.buffalo + 90, top);
+  context.textAlign = "right";
+  context.fillText("L", x.liters + 20, top);
+  context.fillText("RS", x.amount, top);
+
+  data.dailyRows.forEach((day, index) => {
+    const y = top + 28 + index * rowHeight;
+    context.strokeStyle = "#e5e7eb";
+    context.beginPath();
+    context.moveTo(32, y - 18);
+    context.lineTo(width - 32, y - 18);
+    context.stroke();
+    context.fillStyle = "#111827";
+    context.font = `16px ${fontFamily}`;
+    context.textAlign = "left";
+    context.fillText(day.dateBS, x.date, y + 2, 105);
+    context.textAlign = "center";
+    context.fillText(`AM ${day.cowMorning.toFixed(1)}`, x.cow + 80, y - 3);
+    context.fillText(`PM ${day.cowEvening.toFixed(1)}`, x.cow + 80, y + 17);
+    context.fillText(`AM ${day.buffaloMorning.toFixed(1)}`, x.buffalo + 90, y - 3);
+    context.fillText(`PM ${day.buffaloEvening.toFixed(1)}`, x.buffalo + 90, y + 17);
+    context.textAlign = "right";
+    context.fillText(day.totalLiters.toFixed(1), x.liters + 20, y + 7);
+    context.font = `bold 16px ${fontFamily}`;
+    context.fillText(day.totalAmount.toFixed(0), x.amount, y + 7);
+  });
+
+  const footerY = top + data.dailyRows.length * rowHeight + 28;
+  context.strokeStyle = "#374151";
+  context.beginPath();
+  context.moveTo(32, footerY - 14);
+  context.lineTo(width - 32, footerY - 14);
+  context.stroke();
+  context.textAlign = "center";
+  context.fillStyle = "#4b5563";
+  context.font = `16px ${fontFamily}`;
+  context.fillText(`Slip #: ${data.slipRefNum}`, width / 2, footerY + 12);
+  context.fillText("Thank you", width / 2, footerY + 38);
+  return canvas;
 }
 
 function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
@@ -115,18 +200,23 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
       return;
     }
     setLoading(true);
-    const now = new Date();
-    let from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-    let to = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-31`;
+    const todayBs = getTodayBs();
+    const [bsYear, bsMonth] = todayBs.split("-").map(Number);
+    const currentMonthRange = getBsMonthAdRange(todayBs);
+    let from = currentMonthRange.from;
+    let to = currentMonthRange.to;
 
     if (period.type === "twoMonths") {
-      const fromMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
-      const fromYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-      from = `${fromYear}-${String(fromMonth + 1).padStart(2, "0")}-01`;
-      to = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-31`;
+      const previousBsMonth = bsMonth === 1
+        ? `${bsYear - 1}-12-01`
+        : `${bsYear}-${String(bsMonth - 1).padStart(2, "0")}-01`;
+      from = getBsMonthAdRange(previousBsMonth).from;
     } else if (period.type === "thisYear") {
-      from = `${now.getFullYear()}-01-01`;
-      to = `${now.getFullYear()}-12-31`;
+      from = bsToAd(`${bsYear}-01-01`);
+      const nextBsYearStart = bsToAd(`${bsYear + 1}-01-01`);
+      const finalDay = new Date(`${nextBsYearStart}T00:00:00Z`);
+      finalDay.setUTCDate(finalDay.getUTCDate() - 1);
+      to = finalDay.toISOString().slice(0, 10);
     } else if (period.type === "allTime") {
       from = "2000-01-01";
       to = "2099-12-31";
@@ -190,25 +280,22 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
     window.setTimeout(cleanup, 60000);
   };
 
-  const captureSlip = async () => {
-    const element = slipRef.current;
-    if (!element) throw new Error("Slip is not ready");
-    await document.fonts?.ready;
-    const html2canvas = (await import("html2canvas")).default;
-    return html2canvas(element, {
-      scale: Math.min(3, Math.max(2, window.devicePixelRatio || 1)),
-      backgroundColor: "#ffffff",
-      useCORS: true,
-      logging: false,
-      onclone: (clonedDocument) => {
-        const clonedSlip = clonedDocument.querySelector<HTMLElement>("[data-slip-capture='true']");
-        if (clonedSlip) normalizeCaptureColors(clonedDocument, clonedSlip);
-      },
-    });
-  };
-
-  const downloadBlob = (blob: Blob, filename: string) => {
+  const downloadBlob = async (blob: Blob, filename: string) => {
     const objectUrl = URL.createObjectURL(blob);
+    if (/iPad|iPhone|iPod/.test(navigator.userAgent) && typeof File !== "undefined") {
+      const file = new File([blob], filename, { type: blob.type });
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: filename });
+        } catch (error) {
+          if (error instanceof Error && error.name !== "AbortError") window.location.assign(objectUrl);
+        }
+      } else {
+        window.location.assign(objectUrl);
+      }
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+      return;
+    }
     const link = document.createElement("a");
     link.href = objectUrl;
     link.download = filename;
@@ -223,17 +310,27 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
     if (!slipRef.current || exporting) return;
     setExporting(true);
     try {
-      const canvas = await captureSlip();
+      const canvas = createSlipCanvas({
+        farmerName: selected?.name || "",
+        farmerCode: selected?.code || "",
+        phone: selected?.phone,
+        periodLabel,
+        cowTotal,
+        buffaloTotal,
+        totalAmount,
+        slipRefNum,
+        dailyRows,
+      });
       const imgData = canvas.toDataURL("image/jpeg", 0.95);
       const { jsPDF } = await import("jspdf");
-      const heightMm = (canvas.height / canvas.width) * 80;
+      const heightMm = Math.ceil((canvas.height / canvas.width) * 80);
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "mm",
         format: [80, heightMm],
       });
       pdf.addImage(imgData, "JPEG", 0, 0, 80, heightMm);
-      downloadBlob(pdf.output("blob"), `slip_${selected?.code || "farmer"}_${new Date().toISOString().slice(0, 10)}.pdf`);
+      await downloadBlob(pdf.output("blob"), `slip_${selected?.code || "farmer"}_${new Date().toISOString().slice(0, 10)}.pdf`);
       showToast("PDF डाउनलोड भयो ✓");
     } catch {
       showToast("PDF डाउनलोड असफल — Print प्रयोग गर्नुहोस्");
@@ -246,11 +343,21 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
     if (!slipRef.current || exporting) return;
     setExporting(true);
     try {
-      const canvas = await captureSlip();
+      const canvas = createSlipCanvas({
+        farmerName: selected?.name || "",
+        farmerCode: selected?.code || "",
+        phone: selected?.phone,
+        periodLabel,
+        cowTotal,
+        buffaloTotal,
+        totalAmount,
+        slipRefNum,
+        dailyRows,
+      });
       const blob = await new Promise<Blob>((resolve, reject) => {
         canvas.toBlob((result) => result ? resolve(result) : reject(new Error("Could not create JPG")), "image/jpeg", 0.95);
       });
-      downloadBlob(blob, `slip_${selected?.code || "farmer"}_${new Date().toISOString().slice(0, 10)}.jpg`);
+      await downloadBlob(blob, `slip_${selected?.code || "farmer"}_${new Date().toISOString().slice(0, 10)}.jpg`);
       showToast("JPG डाउनलोड भयो ✓");
     } catch {
       showToast("JPG डाउनलोड असफल — Print प्रयोग गर्नुहोस्");
@@ -259,15 +366,20 @@ function SlipInner({ initialFarmerId }: { initialFarmerId?: string }) {
     }
   };
 
+  const todayBs = getTodayBs();
+  const [currentBsYear, currentBsMonth] = todayBs.split("-").map(Number);
+  const previousBsMonth = currentBsMonth === 1
+    ? `${currentBsYear - 1}-12-01`
+    : `${currentBsYear}-${String(currentBsMonth - 1).padStart(2, "0")}-01`;
   const periodLabel =
     period.type === "custom" && period.from && period.to
       ? `${period.from} ~ ${period.to}`
       : period.type === "thisMonth"
-        ? new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(new Date())
+        ? formatBsMonth(todayBs)
         : period.type === "twoMonths"
-          ? "Last 2 Months"
+          ? `${formatBsMonth(previousBsMonth)} - ${formatBsMonth(todayBs)}`
           : period.type === "thisYear"
-            ? "This Year"
+            ? `BS ${currentBsYear}`
             : "All Time";
 
   return (

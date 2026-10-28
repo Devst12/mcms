@@ -36,6 +36,24 @@ export function getTodayBs(): string {
   return `${bs.year}-${String(bs.month + 1).padStart(2, "0")}-${String(bs.date).padStart(2, "0")}`;
 }
 
+export function formatBsMonth(bsDate: string): string {
+  const [year, month, day] = bsDate.split("-").map(Number);
+  return new NepaliDate(year, month - 1, day).format("MMMM YYYY", "en");
+}
+
+export function getBsMonthAdRange(bsDate: string): { from: string; to: string } {
+  const [year, month] = bsDate.split("-").map(Number);
+  const startAd = new NepaliDate(year, month - 1, 1).getAD();
+  const nextMonth = month === 12
+    ? new NepaliDate(year + 1, 0, 1).getAD()
+    : new NepaliDate(year, month, 1).getAD();
+  const end = new Date(Date.UTC(nextMonth.year, nextMonth.month, nextMonth.date - 1));
+  return {
+    from: `${startAd.year}-${String(startAd.month + 1).padStart(2, "0")}-${String(startAd.date).padStart(2, "0")}`,
+    to: end.toISOString().slice(0, 10),
+  };
+}
+
 export function getTodayAd(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
