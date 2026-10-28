@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Plus, ClipboardList, Users, MoreHorizontal, RefreshCw } from "lucide-react";
-import { useState, useEffect } from "react";
-import { getUnsyncedItems } from "@/lib/indexed-db";
+import { useState, useEffect, useCallback } from "react";
+import { getUnsyncedItems, markSynced } from "@/lib/indexed-db";
 
 // Left/right of the center FAB — "दूध थप्नुहोस्" is promoted to its own
 // floating action button instead of competing as a fifth flat tab.
@@ -41,11 +41,18 @@ function NavItem({ href, label, Icon, active }: { href: string; label: string; I
   );
 }
 
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
+
 export default function Navbar() {
   const pathname = usePathname();
   const [pendingSync, setPendingSync] = useState(0);
   const [showMore, setShowMore] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,14 +67,20 @@ export default function Navbar() {
       }
     };
     updatePendingCount();
+    const updateOnline = () => setIsOnline(navigator.onLine);
+    updateOnline();
+    window.addEventListener("online", updateOnline);
+    window.addEventListener("offline", updateOnline);
     const interval = setInterval(updatePendingCount, 30000);
     return () => {
       cancelled = true;
       clearInterval(interval);
+      window.removeEventListener("online", updateOnline);
+      window.removeEventListener("offline", updateOnline);
     };
   }, []);
 
-  const handleSync = async () => {
+  const handleSync = useCallback(async () => {
     setSyncing(true);
     try {
       const entries = await getUnsyncedItems("entries");
@@ -93,24 +106,65 @@ export default function Navbar() {
 
       if (res.ok) {
         const result = await res.json();
-        const successIds = new Set(
+        const successful = new Map<string, { serverId?: string }>(
           (result.results || [])
             .filter((r: { success: boolean }) => r.success)
-            .map((r: { id: string }) => r.id)
+            .map((r: { id: string; serverId?: string }) => [r.id, { serverId: r.serverId }])
         );
         for (const item of items) {
-          if (item.id && successIds.has(item.id)) {
-            await (await import("@/lib/indexed-db")).markSynced(item.collection, item.id);
+          const result = item.id ? successful.get(item.id) : undefined;
+          if (item.id && result) {
+            await markSynced(
+              item.collection,
+              item.id,
+              item.collection === "entries" && result.serverId ? { _id: result.serverId } : {}
+            );
           }
         }
-        await (await import("@/lib/indexed-db")).clearSyncQueue();
-        setPendingSync(0);
+        const [remainingEntries, remainingCompanies, remainingAdvances] = await Promise.all([
+          getUnsyncedItems("entries"),
+          getUnsyncedItems("company_collections"),
+          getUnsyncedItems("advances"),
+        ]);
+        setPendingSync(remainingEntries.length + remainingCompanies.length + remainingAdvances.length);
       }
     } catch (err) {
       console.error("Sync failed", err);
     } finally {
       setSyncing(false);
     }
+  }, []);
+
+  useEffect(() => {
+    const syncWhenOnline = () => {
+      if (navigator.onLine) void handleSync();
+    };
+    window.addEventListener("online", syncWhenOnline);
+    if (navigator.onLine) syncWhenOnline();
+    const interval = setInterval(syncWhenOnline, 60000);
+    return () => {
+      window.removeEventListener("online", syncWhenOnline);
+      clearInterval(interval);
+    };
+  }, [handleSync]);
+
+  useEffect(() => {
+    const captureInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as InstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", captureInstallPrompt);
+    return () => window.removeEventListener("beforeinstallprompt", captureInstallPrompt);
+  }, []);
+
+  const installApp = async () => {
+    if (!installPrompt) {
+      alert("To install: open your browser menu and choose Add to Home Screen or Install app.");
+      return;
+    }
+    await installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
   };
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
@@ -122,6 +176,12 @@ export default function Navbar() {
           className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]"
           onClick={() => setShowMore(false)}
         />
+      )}
+
+      {!isOnline && (
+        <div role="status" className="fixed bottom-[calc(76px+var(--safe-area-bottom))] left-3 right-3 z-20 mx-auto max-w-md rounded-xl bg-amber-100 px-3 py-2 text-center text-xs font-semibold text-amber-900 shadow-sm">
+          Offline · saved entries will sync when connected
+        </div>
       )}
 
       {showMore && (
@@ -144,6 +204,16 @@ export default function Navbar() {
                 </Link>
               );
             })}
+            <button
+              onClick={() => {
+                void installApp();
+                setShowMore(false);
+              }}
+              className="flex flex-col items-center justify-center gap-1 min-h-[52px] rounded-xl text-[11.5px] font-semibold bg-blue-50 text-blue-700"
+            >
+              <span aria-hidden="true">⬇</span>
+              <span>Install app</span>
+            </button>
             <button
               onClick={() => {
                 handleSync();
