@@ -257,18 +257,18 @@ export async function calculatePayment(farmerId: string, month: string): Promise
   advancesDeducted: number;
   finalAmount: number;
 } | null> {
-  const db = await getDb();
   const [entries, advances] = await Promise.all([
-    db.collection<Entry>("entries").find({ farmerId, dateAD: { $regex: `^${month}` } }).toArray(),
-    db.collection<Advance>("advances").find({ farmerId, settled: false }).toArray(),
+    getEntries(`${month}-01`, `${month}-31`, farmerId),
+    getAdvances(farmerId),
   ]);
+  const unsettledAdvances = advances.filter((advance) => !advance.settled);
   const cowEntries = entries.filter((e) => e.milkType === "cow");
   const buffaloEntries = entries.filter((e) => e.milkType === "buffalo");
   const cowTotal = cowEntries.reduce((sum, e) => sum + e.morningQty + e.eveningQty, 0);
   const buffaloTotal = buffaloEntries.reduce((sum, e) => sum + e.morningQty + e.eveningQty, 0);
   const milkAmount = cowEntries.reduce((sum, e) => sum + (e.morningQty + e.eveningQty) * e.rateUsed, 0) +
     buffaloEntries.reduce((sum, e) => sum + (e.morningQty + e.eveningQty) * e.rateUsed, 0);
-  const advancesDeducted = advances.reduce((sum, a) => sum + a.amount, 0);
+  const advancesDeducted = unsettledAdvances.reduce((sum, a) => sum + a.amount, 0);
   const finalAmount = Math.max(0, milkAmount - advancesDeducted);
   return { cowTotal, buffaloTotal, milkAmount, advancesDeducted, finalAmount };
 }
